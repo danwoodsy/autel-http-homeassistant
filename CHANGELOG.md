@@ -3,6 +3,12 @@
 Version numbers below identify integration revisions. GitHub releases will use
 matching `v` tags, for example `v0.1.3` for manifest version `0.1.3`.
 
+## 0.1.4 — 2026-10-11
+
+- Add Wi-Fi signal quality using the charger's frontend labels, from Very poor
+  to Very good. Preserve the numeric signal-level entity and use the same
+  cached network response, without additional charger requests.
+
 ## 0.1.3 — 2026-10-11
 
 - Explain each polling setting directly beneath its input, including the

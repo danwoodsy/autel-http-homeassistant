@@ -55,7 +55,7 @@ of the Sigenergy example:
 | Controls | **Start charging**, **Stop charging** buttons |
 | Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps |
 | Sensors | **Status**, **Charging**, **Vehicle connected**, **Charging power** (kW), **Charging current** (A), **Supply voltage** (V), **Session energy** (kWh), **Session duration**, **Meter energy** (kWh) |
-| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Network signal level** (0–4), **HTTP requests per minute**, **Autostart** (read-only), **Refresh**, download diagnostics |
+| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Wi-Fi signal quality**, **Network signal level** (0–4), **HTTP requests per minute**, **Autostart** (read-only), **Refresh**, download diagnostics |
 | Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle |
 
 The current limit is further capped by the discovered connector rating and
@@ -71,6 +71,13 @@ detailed refresh interval. Other group-1536 fields, including `OcppState` and
 frontend describes OCPP state 0 as Normal; it does not establish a live OCPP
 connection. Upgrading enables a network signal entity previously disabled by
 the integration default while preserving explicit user disables.
+
+**Wi-Fi signal quality** uses the charger's own frontend labels: **0 = Very poor,
+1 = Weak, 2 = Fair, 3 = Good, 4 = Very good**. It reads the same cached network
+response as the numeric signal sensor and makes no additional requests. Signal
+quality is unknown for an unrecognized level or when the active network is not
+Wi-Fi. The level does not identify the Wi-Fi band or give an exact dBm value.
+The numeric **Network signal level** entity is preserved for existing automations.
 
 The integration bundles its own charger/HTTPS icon in `brand/icon.png`, used
 by Home Assistant's local brand-image support and included in the manual ZIP.

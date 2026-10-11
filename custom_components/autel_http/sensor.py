@@ -25,7 +25,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from . import AutelConfigEntry
 from .api import numeric
-from .const import CHARGER_STATES
+from .const import CHARGER_STATES, WIFI_SIGNAL_QUALITY
 from .coordinator import AutelCoordinator
 from .entity import AutelEntity
 
@@ -159,6 +159,16 @@ SENSORS = (
         icon="mdi:signal",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    AutelSensorDescription(
+        key="wifi_signal_quality",
+        translation_key="wifi_signal_quality",
+        group="network",
+        field="signalLevel",
+        icon="mdi:wifi",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(WIFI_SIGNAL_QUALITY.values()),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 ) + tuple(
     AutelSensorDescription(
         key=f"phase_{phase.lower()}_current",
@@ -228,6 +238,10 @@ class AutelSensor(AutelEntity, SensorEntity):
         value = numeric(record.get(description.field))
         if description.key == "status":
             return CHARGER_STATES.get(value)
+        if description.key == "wifi_signal_quality":
+            if numeric(record.get("networkType")) != 4:
+                return None
+            return WIFI_SIGNAL_QUALITY.get(value)
         return value * description.scale if value is not None else None
 
 

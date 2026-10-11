@@ -23,6 +23,15 @@ MIN_CHARGING_INTERVAL = 5
 MIN_CURRENT = 6
 MAX_CURRENT = 32
 
+# The charger's frontend labels its Wi-Fi signal levels with these terms.
+WIFI_SIGNAL_QUALITY = {
+    0: "very_poor",
+    1: "weak",
+    2: "fair",
+    3: "good",
+    4: "very_good",
+}
+
 CHARGER_STATES = {
     0: "idle",
     1: "preparing",

@@ -156,6 +156,16 @@
       },
       "http_requests_per_minute": {
         "name": "HTTP requests per minute"
+      },
+      "wifi_signal_quality": {
+        "name": "Wi-Fi signal quality",
+        "state": {
+          "very_poor": "Very poor",
+          "weak": "Weak",
+          "fair": "Fair",
+          "good": "Good",
+          "very_good": "Very good"
+        }
       }
     }
   }

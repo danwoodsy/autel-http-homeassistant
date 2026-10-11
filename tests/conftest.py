@@ -153,16 +153,22 @@ class FakeCharger:
                     args = payload["data"]
                     assert args["sn"] == SERIAL
                     assert args["nodeid"] == 10
-                    assert args["code"] == 6
-                    assert args["value"]["connectorId"] == 0
-                    assert 6 <= args["value"]["maxCurr"] <= 32
-                    if self.ack == 0:
-                        self.current["maxCurr"] = args["value"]["maxCurr"]
+                    assert args["code"] in (4, 6)
+                    if args["code"] == 4:
+                        assert set(args["value"]) == {"CustomizedPnC"}
+                        assert args["value"]["CustomizedPnC"] in (0, 2)
+                        if self.ack == 0:
+                            self.permissions = args["value"].copy()
+                    else:
+                        assert args["value"]["connectorId"] == 0
+                        assert 6 <= args["value"]["maxCurr"] <= 32
+                        if self.ack == 0:
+                            self.current["maxCurr"] = args["value"]["maxCurr"]
                     data = {
                         "ack": self.ack,
                         "nodeid": 10,
                         "sn": SERIAL,
-                        "code": 6,
+                        "code": args["code"],
                         "reboot": False,
                     }
                 case _:

@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import AutelAuthError, AutelClient, AutelError, AutelProtocolError, numeric
 from .const import DOMAIN, MAX_CURRENT, MIN_CURRENT
+from .polling import PollingSettings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,28 +57,30 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
         hass: HomeAssistant,
         entry: ConfigEntry,
         client: AutelClient,
-        status_interval: int,
-        details_interval: int,
-        charging_interval: int,
+        polling: PollingSettings,
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=timedelta(seconds=status_interval),
+            update_interval=timedelta(seconds=polling.unplugged_interval),
             always_update=False,
             request_refresh_debouncer=Debouncer(
                 hass, _LOGGER, cooldown=1, immediate=True
             ),
         )
         self.client = client
-        self.status_interval = status_interval
-        self.charging_interval = charging_interval
-        self.details_interval = details_interval
+        self.polling = polling
+        self.status_interval = polling.status_interval
+        self.charging_interval = polling.charging_interval
+        self.details_interval = polling.details_interval
         self._last_details_attempt: float | None = None
+        self._last_telemetry_update: float | None = None
         self._force_details = False
+        self._force_status = False
         self._force_current = False
+        self._force_permissions = False
 
     async def _async_setup(self) -> None:
         try:
@@ -99,20 +102,44 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
 
     async def async_refresh_all(self) -> None:
         self._force_details = True
+        self._force_status = True
         await self.async_request_refresh()
 
     async def async_refresh_after_control(
-        self, *, refresh_current: bool = False
+        self, *, refresh_current: bool = False, refresh_permissions: bool = False
     ) -> None:
         """Read actual status and any changed setting after a fast control ACK."""
+        self._force_status = True
         if refresh_current:
             self._force_current = True
+        if refresh_permissions:
+            self._force_permissions = True
         await self.async_request_refresh()
 
     async def _async_update_data(self) -> ChargerData:
         try:
-            telemetry = connector_record(await self.client.realtime(1537), "gun_no")
             controller = object_record(await self.client.realtime(2560, 60))
+            connected = self.connection_state(controller)
+            connection_changed = (
+                self.data is not None
+                and connected != self.connection_state(self.data.controller)
+            )
+            now = monotonic()
+            telemetry_due = (
+                self._force_status
+                or self.data is None
+                or connected is not False
+                or connection_changed
+                or self._last_telemetry_update is None
+                or now - self._last_telemetry_update
+                >= self.polling.unplugged_status_interval
+            )
+            if telemetry_due:
+                telemetry = connector_record(await self.client.realtime(1537), "gun_no")
+                self._last_telemetry_update = monotonic()
+                self._force_status = False
+            else:
+                telemetry = self.data.telemetry
             result = ChargerData(
                 telemetry, controller, self.data.current if self.data else {}
             )
@@ -123,10 +150,15 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
                 result.system = self.data.system
                 result.details_available = self.data.details_available.copy()
             now = monotonic()
+            details_interval = (
+                self.polling.unplugged_details_interval
+                if connected is False
+                else self.details_interval
+            )
             details_due = (
                 self._force_details
                 or self._last_details_attempt is None
-                or now - self._last_details_attempt >= self.details_interval
+                or now - self._last_details_attempt >= details_interval
             )
             if details_due:
                 self._force_details = False
@@ -149,31 +181,38 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
                         raise
                     result.details_available.discard("current")
                     _LOGGER.debug("Current limit refresh failed")
+            groups = ()
             if details_due:
-                # Each optional group fails independently. Cached detail values
-                # become unavailable after a failed attempt, not stale readings.
-                for group in ("measurements", "permissions", "network", "system"):
-                    try:
-                        match group:
-                            case "measurements":
-                                value = await self.client.realtime(2561, 60)
-                            case "permissions":
-                                value = await self.client.parameters(4)
-                            case "network":
-                                value = await self.client.request("get_current_network")
-                            case "system":
-                                value = await self.client.realtime(1536)
-                        setattr(result, group, object_record(value))
-                        result.details_available.add(group)
-                    except AutelAuthError:
-                        raise
-                    except AutelError:
-                        result.details_available.discard(group)
-                        _LOGGER.debug("Optional %s refresh failed", group)
+                groups = ("measurements", "permissions", "network", "system")
+            elif self._force_permissions:
+                groups = ("permissions",)
+            self._force_permissions = False
+            # Each optional group fails independently. Cached detail values
+            # become unavailable after a failed attempt, not stale readings.
+            for group in groups:
+                try:
+                    match group:
+                        case "measurements":
+                            value = await self.client.realtime(2561, 60)
+                        case "permissions":
+                            value = await self.client.parameters(4)
+                        case "network":
+                            value = await self.client.request("get_current_network")
+                        case "system":
+                            value = await self.client.realtime(1536)
+                    setattr(result, group, object_record(value))
+                    result.details_available.add(group)
+                except AutelAuthError:
+                    raise
+                except AutelError:
+                    result.details_available.discard(group)
+                    _LOGGER.debug("Optional %s refresh failed", group)
             self.update_interval = timedelta(
                 seconds=(
-                    self.charging_interval
-                    if numeric(telemetry.get("if_work_st")) == 2
+                    self.polling.unplugged_interval
+                    if connected is False
+                    else self.charging_interval
+                    if connected is True and numeric(telemetry.get("if_work_st")) == 2
                     else self.status_interval
                 )
             )
@@ -182,13 +221,14 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
             result.http_requests_per_minute = self.client.requests_last_minute
             _LOGGER.debug(
                 "Refresh complete: status=%s CPState=%s power=%sW current=%sA "
-                "current_limit=%sA details=%s next_interval=%ss",
+                "current_limit=%sA details=%s telemetry_refreshed=%s next_interval=%ss",
                 numeric(telemetry.get("if_work_st")),
                 numeric(controller.get("CPState")),
                 numeric(telemetry.get("power")),
                 numeric(telemetry.get("meter_current")),
                 numeric(result.current.get("maxCurr")),
                 sorted(result.details_available),
+                telemetry_due,
                 self.update_interval.total_seconds(),
             )
             return result
@@ -196,10 +236,38 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
             raise ConfigEntryAuthFailed("Charger authentication failed") from err
         except AutelError as err:
             # An unreachable charger should not be retried at the charging rate.
-            self.update_interval = timedelta(seconds=self.status_interval)
+            self.update_interval = timedelta(seconds=max(60, self.status_interval))
             _LOGGER.debug(
                 "Status refresh failed (%s); next interval=%ss",
                 type(err).__name__,
-                self.status_interval,
+                self.update_interval.total_seconds(),
             )
             raise UpdateFailed("Could not refresh the charger") from err
+
+    @staticmethod
+    def connection_state(controller: dict) -> bool | None:
+        # CP 1 (~12 V) = no car; CP 2 (~9 V) = connected; CP 3 (~6 V) = ready.
+        # ConnectCar is inverted on the observed firmware, so don't use it.
+        state = numeric(controller.get("CPState"))
+        if state == 1:
+            return False
+        if state in (2, 3):
+            return True
+        return None
+
+    @property
+    def vehicle_connected(self) -> bool | None:
+        return self.connection_state(self.data.controller)
+
+    @property
+    def charging(self) -> bool | None:
+        state = numeric(self.data.telemetry.get("if_work_st"))
+        if state not in range(9):
+            return None
+        return state == 2
+
+    @property
+    def telemetry_age_seconds(self) -> float | None:
+        if self._last_telemetry_update is None:
+            return None
+        return round(max(0, monotonic() - self._last_telemetry_update), 1)

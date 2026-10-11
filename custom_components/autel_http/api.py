@@ -301,6 +301,17 @@ class AutelClient:
         )
         self._check_ack(data)
 
+    async def set_autostart(self, enabled: bool) -> None:
+        data = await self.request(
+            "set_param_value",
+            {
+                **self._address(),
+                "code": 4,
+                "value": {"CustomizedPnC": 2 if enabled else 0},
+            },
+        )
+        self._check_ack(data)
+
     async def set_current(self, amps: float, maximum: float) -> None:
         if (
             numeric(amps) is None

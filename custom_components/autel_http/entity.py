@@ -30,7 +30,11 @@ class AutelEntity(CoordinatorEntity[AutelCoordinator]):
         )
 
     async def async_control(
-        self, action: Awaitable[None], *, refresh_current: bool = False
+        self,
+        action: Awaitable[None],
+        *,
+        refresh_current: bool = False,
+        refresh_permissions: bool = False,
     ) -> None:
         try:
             await action
@@ -54,7 +58,7 @@ class AutelEntity(CoordinatorEntity[AutelCoordinator]):
         entry.async_create_background_task(
             self.hass,
             self.coordinator.async_refresh_after_control(
-                refresh_current=refresh_current
+                refresh_current=refresh_current, refresh_permissions=refresh_permissions
             ),
             "Refresh Autel status after control",
         )

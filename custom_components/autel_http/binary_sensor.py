@@ -37,10 +37,7 @@ class AutelCharging(AutelEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        state = numeric(self.coordinator.data.telemetry.get("if_work_st"))
-        if state not in range(9):
-            return None
-        return state == 2
+        return self.coordinator.charging
 
 
 class AutelVehicleConnected(AutelEntity, BinarySensorEntity):
@@ -52,14 +49,7 @@ class AutelVehicleConnected(AutelEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        # CP 1 (~12 V) = no car; CP 2 (~9 V) = connected; CP 3 (~6 V) = ready.
-        # ConnectCar is inverted on the observed firmware, so don't use it.
-        state = numeric(self.coordinator.data.controller.get("CPState"))
-        if state == 1:
-            return False
-        if state in (2, 3):
-            return True
-        return None
+        return self.coordinator.vehicle_connected
 
 
 class AutelAutostart(AutelEntity, BinarySensorEntity):

@@ -3,6 +3,19 @@
 Version numbers below identify integration revisions. GitHub releases will use
 matching `v` tags, for example `v0.1.3` for manifest version `0.1.3`.
 
+## 0.1.5 — 2026-10-11
+
+- Add an Autostart configuration switch using HTTPS parameter 4, with 0 for off
+  and 2 for on. Read the setting back after each accepted change and preserve
+  the existing read-only diagnostic entity.
+- Share the existing permission reading and request a targeted readback after
+  an accepted switch change without displaying an optimistic state.
+- Disable both charging buttons while unplugged or connection is unknown;
+  disable Start while charging and keep Stop enabled while connected.
+- Add High/Medium/Low polling presets and Custom intervals. Check connection
+  more often unplugged while reading telemetry and diagnostics less often.
+  Preserve existing numeric options as Custom and document the request schedules.
+
 ## 0.1.4 — 2026-10-11
 
 - Add Wi-Fi signal quality using the charger's frontend labels, from Very poor

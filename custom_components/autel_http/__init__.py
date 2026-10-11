@@ -10,19 +10,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import AutelClient
 from .const import (
-    CONF_CHARGING_INTERVAL,
-    CONF_DETAILS_INTERVAL,
     CONF_PIN,
     CONF_REQUEST_TIMEOUT,
-    CONF_STATUS_INTERVAL,
-    DEFAULT_CHARGING_INTERVAL,
-    DEFAULT_DETAILS_INTERVAL,
     DEFAULT_REQUEST_TIMEOUT,
-    DEFAULT_STATUS_INTERVAL,
     DOMAIN,
     PLATFORMS,
 )
 from .coordinator import AutelCoordinator
+from .polling import polling_settings
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -50,9 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AutelConfigEntry) -> boo
         hass,
         entry,
         client,
-        entry.options.get(CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
-        entry.options.get(CONF_DETAILS_INTERVAL, DEFAULT_DETAILS_INTERVAL),
-        entry.options.get(CONF_CHARGING_INTERVAL, DEFAULT_CHARGING_INTERVAL),
+        polling_settings(entry.options),
     )
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = AutelRuntimeData(client, coordinator)

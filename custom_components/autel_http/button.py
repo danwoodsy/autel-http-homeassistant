@@ -2,6 +2,7 @@
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -35,7 +36,17 @@ class AutelChargeButton(AutelEntity, ButtonEntity):
         self._attr_translation_key = key
         self._attr_icon = "mdi:play" if enabled else "mdi:stop"
 
+    @property
+    def available(self) -> bool:
+        if not super().available or self.coordinator.vehicle_connected is not True:
+            return False
+        return not self._enabled or self.coordinator.charging is False
+
     async def async_press(self) -> None:
+        if not self.available:
+            raise ServiceValidationError(
+                "This charging control is unavailable for the current vehicle state"
+            )
         await self.async_control(self.coordinator.client.set_charging(self._enabled))
 
 

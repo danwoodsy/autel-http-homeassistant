@@ -1,9 +1,12 @@
 """Download useful cached diagnostics without exposing login credentials."""
 
+from dataclasses import asdict
+
 from homeassistant.const import CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 
 from . import AutelConfigEntry
+from .polling import polling_preset
 
 # Keep an allowlist: unexpected firmware fields must never leak credentials.
 FIELDS = {
@@ -81,10 +84,10 @@ async def async_get_config_entry_diagnostics(
             "last_request_duration": coordinator.client.last_request_duration,
         },
         "polling": {
-            "status_interval": coordinator.status_interval,
-            "charging_interval": coordinator.charging_interval,
+            "preset": polling_preset(entry.options),
+            **asdict(coordinator.polling),
             "active_interval": coordinator.update_interval.total_seconds(),
-            "details_interval": coordinator.details_interval,
+            "telemetry_age_seconds": coordinator.telemetry_age_seconds,
             "last_update_success": coordinator.last_update_success,
             "available_detail_groups": sorted(data.details_available),
         },

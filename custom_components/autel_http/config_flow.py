@@ -1,6 +1,7 @@
 """Configure the local HTTPS address, credentials, and polling cadence."""
 
 from collections.abc import Mapping
+from dataclasses import asdict
 from typing import Any
 
 import probatio
@@ -12,6 +13,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -30,17 +34,19 @@ from .const import (
     CONF_CHARGING_INTERVAL,
     CONF_DETAILS_INTERVAL,
     CONF_PIN,
+    CONF_POLLING_PRESET,
     CONF_REQUEST_TIMEOUT,
     CONF_STATUS_INTERVAL,
-    DEFAULT_CHARGING_INTERVAL,
-    DEFAULT_DETAILS_INTERVAL,
+    CONF_UNPLUGGED_DETAILS_INTERVAL,
+    CONF_UNPLUGGED_INTERVAL,
+    CONF_UNPLUGGED_STATUS_INTERVAL,
     DEFAULT_REQUEST_TIMEOUT,
-    DEFAULT_STATUS_INTERVAL,
     DOMAIN,
     MIN_CHARGING_INTERVAL,
     MIN_STATUS_INTERVAL,
 )
 from .coordinator import connector_record
+from .polling import PRESETS, polling_preset, polling_settings
 
 
 def connection_schema(defaults: Mapping[str, Any], *, reuse_pin: bool = False):
@@ -182,75 +188,89 @@ class AutelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            if user_input[CONF_POLLING_PRESET] == "custom":
+                self._request_timeout = int(user_input[CONF_REQUEST_TIMEOUT])
+                return await self.async_step_custom()
+            return self.async_create_entry(data=user_input)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=probatio.Schema(
+                {
+                    probatio.Required(
+                        CONF_POLLING_PRESET,
+                        default=polling_preset(self.config_entry.options),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[*PRESETS, "custom"],
+                            translation_key="polling_preset",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    probatio.Required(
+                        CONF_REQUEST_TIMEOUT,
+                        default=self.config_entry.options.get(
+                            CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT
+                        ),
+                    ): self._seconds_selector(5, 60),
+                }
+            ),
+        )
+
+    @staticmethod
+    def _seconds_selector(minimum: int, maximum: int) -> NumberSelector:
+        return NumberSelector(
+            NumberSelectorConfig(
+                min=minimum,
+                max=maximum,
+                step=1,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement="s",
+            )
+        )
+
+    async def async_step_custom(self, user_input=None):
         errors = {}
         if user_input is not None:
             if user_input[CONF_CHARGING_INTERVAL] > user_input[CONF_STATUS_INTERVAL]:
                 errors[CONF_CHARGING_INTERVAL] = "charging_too_slow"
             elif user_input[CONF_DETAILS_INTERVAL] < user_input[CONF_STATUS_INTERVAL]:
                 errors[CONF_DETAILS_INTERVAL] = "details_too_fast"
+            elif (
+                user_input[CONF_UNPLUGGED_STATUS_INTERVAL]
+                < user_input[CONF_UNPLUGGED_INTERVAL]
+            ):
+                errors[CONF_UNPLUGGED_STATUS_INTERVAL] = "unplugged_status_too_fast"
+            elif (
+                user_input[CONF_UNPLUGGED_DETAILS_INTERVAL]
+                < user_input[CONF_UNPLUGGED_STATUS_INTERVAL]
+            ):
+                errors[CONF_UNPLUGGED_DETAILS_INTERVAL] = "unplugged_details_too_fast"
             else:
-                return self.async_create_entry(data=user_input)
-        defaults = user_input or self.config_entry.options
+                return self.async_create_entry(
+                    data={
+                        **user_input,
+                        CONF_POLLING_PRESET: "custom",
+                        CONF_REQUEST_TIMEOUT: self._request_timeout,
+                    }
+                )
+        defaults = user_input or asdict(polling_settings(self.config_entry.options))
+        limits = {
+            CONF_UNPLUGGED_INTERVAL: (MIN_STATUS_INTERVAL, 3600),
+            CONF_UNPLUGGED_STATUS_INTERVAL: (MIN_STATUS_INTERVAL, 86400),
+            CONF_UNPLUGGED_DETAILS_INTERVAL: (MIN_STATUS_INTERVAL, 86400),
+            CONF_STATUS_INTERVAL: (MIN_STATUS_INTERVAL, 3600),
+            CONF_CHARGING_INTERVAL: (MIN_CHARGING_INTERVAL, 3600),
+            CONF_DETAILS_INTERVAL: (MIN_STATUS_INTERVAL, 86400),
+        }
         return self.async_show_form(
-            step_id="init",
+            step_id="custom",
             data_schema=probatio.Schema(
                 {
                     probatio.Required(
-                        CONF_CHARGING_INTERVAL,
-                        default=defaults.get(
-                            CONF_CHARGING_INTERVAL, DEFAULT_CHARGING_INTERVAL
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_CHARGING_INTERVAL,
-                            max=3600,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                    probatio.Required(
-                        CONF_STATUS_INTERVAL,
-                        default=defaults.get(
-                            CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_STATUS_INTERVAL,
-                            max=3600,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                    probatio.Required(
-                        CONF_DETAILS_INTERVAL,
-                        default=defaults.get(
-                            CONF_DETAILS_INTERVAL, DEFAULT_DETAILS_INTERVAL
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_STATUS_INTERVAL,
-                            max=86400,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                    probatio.Required(
-                        CONF_REQUEST_TIMEOUT,
-                        default=defaults.get(
-                            CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=5,
-                            max=60,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
+                        key, default=defaults[key]
+                    ): self._seconds_selector(minimum, maximum)
+                    for key, (minimum, maximum) in limits.items()
                 }
             ),
             errors=errors,

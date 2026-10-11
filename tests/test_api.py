@@ -169,7 +169,10 @@ async def test_ack_required_even_on_success(client, charger):
         await client.set_charging(False)
     with pytest.raises(AutelProtocolError):
         await client.set_current(10, 32)
+    with pytest.raises(AutelProtocolError):
+        await client.set_autostart(False)
     assert charger.current["maxCurr"] == 16
+    assert charger.permissions["CustomizedPnC"] == 2
 
 
 @pytest.mark.parametrize(

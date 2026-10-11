@@ -53,7 +53,7 @@ of the Sigenergy example:
 | Section | Entities |
 | --- | --- |
 | Controls | **Start charging**, **Stop charging** buttons |
-| Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps |
+| Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps; **Autostart** on/off switch |
 | Sensors | **Status**, **Charging**, **Vehicle connected**, **Charging power** (kW), **Charging current** (A), **Supply voltage** (V), **Session energy** (kWh), **Session duration**, **Meter energy** (kWh) |
 | Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Wi-Fi signal quality**, **Network signal level** (0–4), **HTTP requests per minute**, **Autostart** (read-only), **Refresh**, download diagnostics |
 | Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle |
@@ -87,8 +87,26 @@ The service returns after its acknowledgement; slow status readback then runs
 asynchronously. **Charging** reports actual charger state, so a car that is full
 or declines charging can remain off after a successful start command.
 **Vehicle connected** remains on when a plugged-in car is stopped.
-Autostart is shown without changing the permission in the charger.
-The hardware start/stop test was performed with Autostart enabled.
+The existing Status sensor is retained. Charging controls follow these rules:
+
+| Vehicle state | Start | Stop |
+| --- | --- | --- |
+| Unplugged | Disabled | Disabled |
+| Plugged in, not charging | Enabled | Enabled |
+| Charging | Disabled | Enabled |
+| Connection unknown or charger unreachable | Unavailable | Unavailable |
+
+An unknown charging state also keeps Start unavailable until a successful read
+establishes whether the vehicle is charging.
+
+**Autostart** in Configuration changes the charger's persistent permission to
+start automatically when a vehicle connects. It uses parameter 4:
+`CustomizedPnC: 0` disables it and `2` enables it. Manual HTTPS Start/Stop was
+verified with Autostart off. This setting is separate from the current charging
+session; use Start/Stop for session control. After a change, the integration
+reads Autostart back and displays the reported value. Enabling Autostart can
+affect the charger's RFID authorization policy; check the Autel app if you use
+RFID cards. The existing read-only Autostart diagnostic entity is preserved.
 
 Unknown state codes are shown as unknown. Sensor failures mark readings
 unavailable instead of fabricating zero power or a disconnected vehicle.
@@ -102,45 +120,68 @@ measurement statistics. Temperature is omitted because its raw scale is unverifi
 
 Open the integration's **Configure** options:
 
-Each field includes an explanation of the readings it refreshes and a suggested
-starting value. All four settings use numeric inputs with seconds shown beside
-the value.
+Choose **High**, **Medium**, **Low**, or **Custom**, and set the timeout for each
+HTTPS request. **Medium** is the recommended starting point. **Custom** opens
+six numeric interval settings, each with an explanation and seconds beside it.
+Saving reloads the integration without changing charger settings.
 
 After an update, restart Home Assistant fully and refresh your browser to load
 the latest field labels and explanations. Home Assistant caches translations
 while it is running.
 
-| Option | Default | Allowed |
-| --- | --- | --- |
-| Whilst charging refresh interval | 10 seconds | 5–3,600 seconds; no slower than idle |
-| Idle status refresh interval | 60 seconds | 15–3,600 seconds |
-| Detailed refresh interval | 120 seconds | Idle interval–86,400 seconds |
-| Timeout per HTTPS request | 15 seconds | 5–60 seconds |
+Preset intervals are in seconds:
 
-Each normal refresh sends **two** requests: connector telemetry (`1537`, node 10)
-and controller/connection status (`2560`, node 60). Group `1537` supplies charging
-state, power, current, supply voltage, session energy, and elapsed time. Group
-`2560` supplies the control-pilot state used to distinguish a stopped, plugged-in
-vehicle from an unplugged one. Group `2561` supplies additional phase, pilot,
-and meter readings, so it belongs on the slower detailed interval.
+| Preset | Unplugged: connection / telemetry / details | Plugged, not charging: status / details | Charging: status / details |
+| --- | --- | --- | --- |
+| High | 10 / 60 / 150 | 10 / 60 | 5 / 60 |
+| **Medium** | **20 / 120 / 300** | **20 / 120** | **10 / 120** |
+| Low | 30 / 240 / 600 | 40 / 240 | 20 / 240 |
 
-Polling automatically switches to the charging interval when `1537` reports
-charging (`if_work_st: 2`), and to the idle interval for all other states. Set the
-charging interval to **5, 10, or 15 seconds** as preferred; 10 seconds is the
-default starting point for the small server. Existing saved status intervals
-become the idle interval unchanged. An external start, such as from the Autel
-app, is detected on the next idle poll. Home Assistant start/stop commands
-request immediate status readback. A failed status poll backs off to the idle
-interval until a successful poll establishes the charger state again.
+High halves Medium's intervals. Low doubles them, except that unplugged
+connection checks stay at 30 seconds for reasonably quick plug-in detection.
+Existing saved numeric intervals are preserved as **Custom** on upgrade;
+select **Medium** to adopt the complete recommended schedule.
 
-When detailed polling is due, **five** more requests fetch configured current
-(`parameter 5`), detailed meter/pilot/phase measurements (`2561`), Autostart
-(`parameter 4`), network status, and CPU/memory/flash usage (`1536`). A current-limit
-change requests immediate configured-current readback as well as status, without
-refreshing unrelated diagnostics. Changes made in another app appear on the
-next detailed poll or when you press **Refresh**.
+The request table compares version 0.1.4 with the revised **Medium** schedule:
+
+| Request | Previous schedule (0.1.4) | Unplugged | Plugged, not charging | Charging |
+| --- | --- | --- | --- | --- |
+| `get_realtime_data`, **2560**, node 60: connection/pilot | 60 s idle / 10 s charging | **20 s** | **20 s** | **10 s** |
+| `get_realtime_data`, **1537**, node 10: status, power, current, voltage, session | 60 s idle / 10 s charging | **120 s**, plus immediately on a connection change | **20 s** | **10 s** |
+| `get_param_value`, **5**: current limit | 120 s | **300 s** | **120 s** | **120 s** |
+| `get_realtime_data`, **2561**, node 60: detailed meter/phase/pilot readings | 120 s | **300 s** | **120 s** | **120 s** |
+| `get_param_value`, **4**: Autostart | 120 s | **300 s** | **120 s** | **120 s** |
+| `get_current_network`: network signal | 120 s | **300 s** | **120 s** | **120 s** |
+| `get_realtime_data`, **1536**, node 10: CPU/memory/flash | 120 s | **300 s** | **120 s** | **120 s** |
+
+Unplugged checks normally send only **one request**, group `2560`. On a detected
+connection change, group `1537` is also read in that refresh. This updates vehicle
+presence, button availability, and charging telemetry together. Between the
+slower unplugged telemetry reads, Home Assistant retains the last readings.
+Plugged-in refreshes send **two requests**, `2560` then `1537`. Reporting charging
+(`if_work_st: 2`) selects the charging interval; otherwise the plugged-in interval
+applies. Autostart runs on the charger independently of Home Assistant polling.
+
+Detailed refreshes add the **five** settings/measurement requests in the table.
+The periodic Autostart read keeps changes made in the Autel app visible and
+costs one request every 300 seconds unplugged or 120 seconds plugged in on Medium.
+Current-limit and Autostart changes made in Home Assistant request immediate
+readback of that setting and charging status, without forcing other diagnostics.
+Start/Stop also requests immediate status readback. **Refresh** forces all seven
+reads and can be used before waiting for the next plug-in check.
+
+Nominal Medium averages are about **4.5 requests/minute unplugged**, **8.5 plugged
+in but not charging**, and **14.5 charging**. These exclude login, controls, and
+connection transitions; response times lengthen the intervals and lower the
+scheduled rate. CPU/memory/network diagnostics can update less often unplugged.
 Login and identity discovery run at setup; login also runs when authentication
 is rejected. Wi-Fi scans and unrelated settings are not polled.
+
+Custom allows connection/status intervals from 5–3,600 seconds, and unplugged
+telemetry/details or plugged-in details up to 86,400 seconds. Charging must be
+at least as fast as plugged-in status; additional readings must be at least as
+slow as the relevant status interval. Request timeout defaults to **15 seconds**
+and accepts **5–60 seconds**.
 
 Requests run **one at a time**. A new normal interval starts after the previous
 refresh finishes, so slow replies lengthen the effective interval and never
@@ -149,8 +190,9 @@ responses gives about 9–11 seconds between normal refresh starts; a detailed
 refresh takes longer. Detailed intervals are checked during normal polls;
 they are approximate and can be longer than the selected interval. A pending
 control gets a turn after the current HTTP request finishes. **Refresh** requests
-a full refresh; repeated presses within one second are combined. Accepted
-controls request a status refresh as well. Option changes reload the integration.
+a full refresh; repeated presses within one second are combined. Option changes
+reload the integration. A failed core poll backs off to at least **60 seconds**;
+Refresh remains available for recovery.
 
 If an optional detail request fails, its entities become unavailable while the
 normal charging sensors keep working. A failed detail request is retried on the

@@ -46,27 +46,50 @@
     "step": {
       "init": {
         "title": "Polling settings",
-        "description": "Home Assistant automatically switches between charging and idle refresh rates. Requests run one at a time to reduce load on the charger.\n\nEach interval is the wait after a refresh finishes. For example, a 10-second interval with a 4-second refresh gives roughly 14 seconds between refresh starts. Saving reloads the integration.",
+        "description": "Choose a polling preset. Medium checks for a vehicle every 20 s while unplugged, polls a connected vehicle every 20 s, and polls charging every 10 s. High refreshes faster; Low reduces traffic and keeps unplugged detection at 30 s. Custom exposes six intervals.\n\nIntervals are waits after each refresh finishes, so response time adds to the effective delay. Saving reloads the integration without changing charger settings.",
         "data": {
-          "charging_interval": "Refresh while charging",
-          "status_interval": "Refresh while idle",
-          "details_interval": "Refresh additional readings",
+          "polling_preset": "Polling rate",
           "request_timeout": "HTTPS request timeout"
         },
         "data_description": {
-          "charging_interval": "Refreshes charging status, vehicle connection, power, current, voltage and session readings using two requests. Recommended: 10 s; 5–15 s gives faster updates. Must be no longer than the idle interval.",
-          "status_interval": "Used whenever the charger is not actively charging, including while a vehicle is plugged in but stopped. Recommended: 60 s. Starts made in the Autel app are detected on the next idle refresh; Home Assistant controls request immediate status readback.",
-          "details_interval": "Adds five requests for the current limit, meter energy, phase/pilot readings, Autostart, network signal and CPU/memory/flash usage. Recommended: 120 s; use 300 s to reduce traffic. Must be at least as long as the idle interval. Current-limit changes made in Home Assistant request immediate readback.",
-          "request_timeout": "Maximum time to wait for each individual HTTPS request. Recommended: 15 s; normal telemetry can take 2–3 s. Increase if requests time out on your Wi-Fi. This changes the time allowed for a reply, not the refresh rate."
+          "polling_preset": "Medium is recommended. Unplugged telemetry and diagnostics refresh less often than connection checks. Existing numeric settings are retained as Custom; choose Medium to adopt the recommended schedule.",
+          "request_timeout": "Maximum time to wait for each HTTPS request. Recommended: 15 s; normal telemetry can take 2-3 s. Increase if requests time out. This changes the allowed response time, not the polling rate."
+        }
+      },
+      "custom": {
+        "title": "Custom polling intervals",
+        "description": "Set intervals in seconds. Unplugged connection checks make one request; connected or charging status makes two. Additional readings add five. A connection change and accepted Home Assistant controls request immediate telemetry.\n\nIntervals start after the previous refresh finishes. Slower responses lengthen the effective interval. Saving reloads the integration.",
+        "data": {
+          "unplugged_interval": "Vehicle detection while unplugged",
+          "unplugged_status_interval": "Telemetry while unplugged",
+          "unplugged_details_interval": "Additional readings while unplugged",
+          "status_interval": "Status while plugged in, not charging",
+          "charging_interval": "Status while charging",
+          "details_interval": "Additional readings while plugged in"
+        },
+        "data_description": {
+          "unplugged_interval": "Checks vehicle connection using realtime group 2560. Recommended: 20 s; 10-30 s balances detection delay and traffic. Reply time adds to the delay. Refresh can check sooner.",
+          "unplugged_status_interval": "Reads status, power, current, voltage and session data using group 1537. Recommended: 120 s. A detected connection change also reads this immediately. Must be no shorter than vehicle detection.",
+          "unplugged_details_interval": "Adds five reads for current limit, detailed meter/pilot data, Autostart, network signal and CPU/memory/flash. Recommended: 300 s. Must be at least as long as unplugged telemetry.",
+          "status_interval": "Reads vehicle connection and telemetry while the car is plugged in but stopped, preparing, or otherwise not charging. Recommended: 20 s. Both Start and Stop are enabled when connected and not charging.",
+          "charging_interval": "Reads vehicle connection and telemetry while charging. Recommended: 10 s; 5-15 s gives faster updates. Must be no longer than the plugged-in non-charging interval. Start is disabled while charging.",
+          "details_interval": "Adds the five settings/measurement reads while plugged in, whether charging or stopped. Recommended: 120 s. Must be at least as long as plugged-in status. Current-limit and Autostart changes request immediate readback."
         }
       }
     },
     "error": {
-      "details_too_fast": "Set additional readings to the idle interval or longer.",
-      "charging_too_slow": "Set charging refresh to the idle interval or shorter."
+      "details_too_fast": "Set plugged-in additional readings to the plugged-in status interval or longer.",
+      "charging_too_slow": "Set charging refresh to the plugged-in status interval or shorter.",
+      "unplugged_status_too_fast": "Set unplugged telemetry to the vehicle detection interval or longer.",
+      "unplugged_details_too_fast": "Set unplugged additional readings to the unplugged telemetry interval or longer."
     }
   },
   "entity": {
+    "switch": {
+      "autostart": {
+        "name": "Autostart"
+      }
+    },
     "number": {
       "current_limit": {
         "name": "Current limit"
@@ -166,6 +189,16 @@
           "good": "Good",
           "very_good": "Very good"
         }
+      }
+    }
+  },
+  "selector": {
+    "polling_preset": {
+      "options": {
+        "high": "High (faster)",
+        "medium": "Medium (recommended)",
+        "low": "Low (less traffic)",
+        "custom": "Custom"
       }
     }
   }

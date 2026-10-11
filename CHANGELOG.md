@@ -12,6 +12,8 @@ matching `v` tags, for example `v0.1.3` for manifest version `0.1.3`.
   The combined sensor's name places Refresh last in the default diagnostic list.
 - Show Next on the polling preset page and explain how Custom opens the six
   interval fields, followed by Submit to save.
+- Add HACS/Hassfest validation, a gated versioned-release workflow, first-release
+  notes, and instructions for submitting the integration to HACS's catalog.
 
 ## 0.1.5 — 2026-10-11
 

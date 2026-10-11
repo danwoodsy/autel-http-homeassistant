@@ -12,6 +12,8 @@ Other firmware/models need validation against the same interface.
 
 ## Install through HACS
 
+[![Open your Home Assistant instance and add this repository to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=danwoodsy&repository=autel-maxicharger-ha&category=integration)
+
 1. Open **HACS → ⋮ → Custom repositories**.
 2. Add `https://github.com/danwoodsy/autel-maxicharger-ha` with type
    **Integration**.
@@ -296,6 +298,10 @@ the manifest version with a `v` prefix, such as `v0.1.3` for version `0.1.3`.
 HACS uses published **GitHub releases** for version selection and updates; a Git
 tag alone does not create a release. Until releases are published, select `main`
 when downloading this custom repository.
+
+Maintainers: [HACS publishing and release instructions](docs/hacs-publishing.md)
+cover validation, the first release, default catalog submission, and future
+version updates.
 
 ## Development
 

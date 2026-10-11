@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate before publishing
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    name: Publish GitHub release
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Check release version and notes
+        id: metadata
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          version = json.loads(Path('custom_components/autel_http/manifest.json').read_text())['version']
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+              raise SystemExit('Release version must use major.minor.patch')
+          tag = f'v{version}'
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              if os.environ['GITHUB_REF_NAME'] != tag:
+                  raise SystemExit('Git tag must match the integration manifest version')
+          elif os.environ['GITHUB_REF'] != 'refs/heads/main':
+              raise SystemExit('Manual releases must run from main')
+          notes = Path('docs/releases') / f'{tag}.md'
+          if not notes.is_file():
+              raise SystemExit(f'Missing release notes: {notes}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\nnotes={notes.as_posix()}\n')
+          PY
+      - name: Build manual installation ZIP
+        run: python scripts/package.py
+      - name: Publish release after all checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_NOTES: ${{ steps.metadata.outputs.notes }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/autel_http.zip \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG — Autel MaxiCharger over HTTPS" \
+            --notes-file "$RELEASE_NOTES" \
+            --latest

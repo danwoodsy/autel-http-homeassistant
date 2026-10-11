@@ -95,6 +95,14 @@ measurement statistics. Temperature is omitted because its raw scale is unverifi
 
 Open the integration's **Configure** options:
 
+Each field includes an explanation of the readings it refreshes and a suggested
+starting value. All four settings use numeric inputs with seconds shown beside
+the value.
+
+After an update, restart Home Assistant fully and refresh your browser to load
+the latest field labels and explanations. Home Assistant caches translations
+while it is running.
+
 | Option | Default | Allowed |
 | --- | --- | --- |
 | Whilst charging refresh interval | 10 seconds | 5–3,600 seconds; no slower than idle |
@@ -214,6 +222,16 @@ the chosen next polling interval. They omit PINs, password hashes, tokens,
 request headers, charger addresses, and serial numbers; complete request/response
 bodies are never logged. Logging adds no charger requests. Restore the level
 to `warning` with the same action to end a manually enabled debug session.
+
+## Versions
+
+The integration version is recorded in
+[`custom_components/autel_http/manifest.json`](custom_components/autel_http/manifest.json).
+Changes are documented in [CHANGELOG.md](CHANGELOG.md). Release tags should match
+the manifest version with a `v` prefix, such as `v0.1.3` for version `0.1.3`.
+HACS uses published **GitHub releases** for version selection and updates; a Git
+tag alone does not create a release. Until releases are published, select `main`
+when downloading this custom repository.
 
 ## Development
 

@@ -46,18 +46,24 @@
     "step": {
       "init": {
         "title": "Polling settings",
-        "description": "Status polling makes two HTTPS requests per refresh, using the charging interval while charging and the idle interval otherwise. Detailed polling adds five requests for the current limit, meter readings, Autostart, network signal, and CPU/memory/flash usage. Requests run one at a time; the interval starts after a refresh finishes. Detailed polling must be at least as slow as idle polling. Changes reload the integration.",
+        "description": "Home Assistant automatically switches between charging and idle refresh rates. Requests run one at a time to reduce load on the charger.\n\nEach interval is the wait after a refresh finishes. For example, a 10-second interval with a 4-second refresh gives roughly 14 seconds between refresh starts. Saving reloads the integration.",
         "data": {
-          "charging_interval": "Whilst charging refresh interval (seconds)",
-          "status_interval": "Idle status refresh interval (seconds)",
-          "details_interval": "Detailed refresh interval (seconds)",
-          "request_timeout": "Timeout per HTTPS request (seconds)"
+          "charging_interval": "Refresh while charging",
+          "status_interval": "Refresh while idle",
+          "details_interval": "Refresh additional readings",
+          "request_timeout": "HTTPS request timeout"
+        },
+        "data_description": {
+          "charging_interval": "Refreshes charging status, vehicle connection, power, current, voltage and session readings using two requests. Recommended: 10 s; 5–15 s gives faster updates. Must be no longer than the idle interval.",
+          "status_interval": "Used whenever the charger is not actively charging, including while a vehicle is plugged in but stopped. Recommended: 60 s. Starts made in the Autel app are detected on the next idle refresh; Home Assistant controls request immediate status readback.",
+          "details_interval": "Adds five requests for the current limit, meter energy, phase/pilot readings, Autostart, network signal and CPU/memory/flash usage. Recommended: 120 s; use 300 s to reduce traffic. Must be at least as long as the idle interval. Current-limit changes made in Home Assistant request immediate readback.",
+          "request_timeout": "Maximum time to wait for each individual HTTPS request. Recommended: 15 s; normal telemetry can take 2–3 s. Increase if requests time out on your Wi-Fi. This changes the time allowed for a reply, not the refresh rate."
         }
       }
     },
     "error": {
-      "details_too_fast": "Detailed refresh must be at least as slow as idle status refresh.",
-      "charging_too_slow": "Charging refresh must be at least as fast as idle status refresh."
+      "details_too_fast": "Set additional readings to the idle interval or longer.",
+      "charging_too_slow": "Set charging refresh to the idle interval or shorter."
     }
   },
   "entity": {

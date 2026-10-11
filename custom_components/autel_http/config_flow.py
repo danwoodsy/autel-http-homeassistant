@@ -200,27 +200,42 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
                         default=defaults.get(
                             CONF_CHARGING_INTERVAL, DEFAULT_CHARGING_INTERVAL
                         ),
-                    ): probatio.All(
-                        probatio.Coerce(int),
-                        probatio.Range(min=MIN_CHARGING_INTERVAL, max=3600),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_CHARGING_INTERVAL,
+                            max=3600,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
                     ),
                     probatio.Required(
                         CONF_STATUS_INTERVAL,
                         default=defaults.get(
                             CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL
                         ),
-                    ): probatio.All(
-                        probatio.Coerce(int),
-                        probatio.Range(min=MIN_STATUS_INTERVAL, max=3600),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_STATUS_INTERVAL,
+                            max=3600,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
                     ),
                     probatio.Required(
                         CONF_DETAILS_INTERVAL,
                         default=defaults.get(
                             CONF_DETAILS_INTERVAL, DEFAULT_DETAILS_INTERVAL
                         ),
-                    ): probatio.All(
-                        probatio.Coerce(int),
-                        probatio.Range(min=MIN_STATUS_INTERVAL, max=86400),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_STATUS_INTERVAL,
+                            max=86400,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
                     ),
                     probatio.Required(
                         CONF_REQUEST_TIMEOUT,

@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    PERCENTAGE,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -16,6 +17,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -115,12 +117,45 @@ SENSORS = (
         entity_registry_enabled_default=False,
     ),
     AutelSensorDescription(
+        key="cpu_usage",
+        translation_key="cpu_usage",
+        group="system",
+        field="CpuState",
+        icon="mdi:cpu-64-bit",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AutelSensorDescription(
+        key="memory_usage",
+        translation_key="memory_usage",
+        group="system",
+        field="MemState",
+        icon="mdi:memory",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AutelSensorDescription(
+        key="flash_usage",
+        translation_key="flash_usage",
+        group="system",
+        field="FlashState",
+        icon="mdi:harddisk",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AutelSensorDescription(
         key="network_signal_level",
         translation_key="network_signal_level",
         group="network",
         field="signalLevel",
+        icon="mdi:signal",
         entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
     ),
 ) + tuple(
     AutelSensorDescription(
@@ -144,6 +179,21 @@ async def async_setup_entry(
     entry: AutelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    # Version 0.1.0 disabled signal visibility by default. Enable that default
+    # on upgrade, while preserving any explicit user choice to disable it.
+    registry = er.async_get(hass)
+    info = entry.runtime_data.client.info
+    assert info is not None
+    entity_id = registry.async_get_entity_id(
+        "sensor", entry.domain, f"{info.serial}_network_signal_level"
+    )
+    if entity_id is not None:
+        registered = registry.async_get(entity_id)
+        if (
+            registered
+            and registered.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        ):
+            registry.async_update_entity(entity_id, disabled_by=None)
     async_add_entities(
         AutelSensor(entry.runtime_data.coordinator, description)
         for description in SENSORS

@@ -1,5 +1,7 @@
 # Autel MaxiCharger over HTTPS for Home Assistant
 
+<img src="https://raw.githubusercontent.com/danwoodsy/autel-maxicharger-ha/main/custom_components/autel_http/brand/icon.png" alt="Autel MaxiCharger over HTTPS icon" width="128" height="128">
+
 `autel-maxicharger-ha` provides local HTTPS control and sensors for Home Assistant.
 
 Control an Autel MaxiCharger through its local `https://<charger>/localcfg`
@@ -53,13 +55,25 @@ of the Sigenergy example:
 | Controls | **Start charging**, **Stop charging** buttons |
 | Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps |
 | Sensors | **Status**, **Charging**, **Vehicle connected**, **Charging power** (kW), **Charging current** (A), **Supply voltage** (V), **Session energy** (kWh), **Session duration**, **Meter energy** (kWh) |
-| Diagnostic | **Autostart** (read-only), **Refresh**, download diagnostics |
-| Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle, network signal level |
+| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Network signal level** (0–4), **Autostart** (read-only), **Refresh**, download diagnostics |
+| Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle |
 
 The current limit is further capped by the discovered connector rating and
 its reported offline-current ceiling. The device name, entity names, and area
 can be changed using Home Assistant's usual controls. Enable additional
 diagnostic entities on the device's entity page; this adds no polling requests.
+
+CPU, memory, and flash usage come from realtime group `1536`, with percentage
+units confirmed by the charger's frontend. Network signal is the reported
+0–4 level, not a percentage or dBm measurement. These diagnostics use the
+detailed refresh interval. Other group-1536 fields, including `OcppState` and
+`LedBoardState`, are retained in downloaded diagnostics as raw codes. The
+frontend describes OCPP state 0 as Normal; it does not establish a live OCPP
+connection. Upgrading enables a network signal entity previously disabled by
+the integration default while preserving explicit user disables.
+
+The integration bundles its own charger/HTTPS icon in `brand/icon.png`, used
+by Home Assistant's local brand-image support and included in the manual ZIP.
 
 Pressing **Start charging** or **Stop charging** sends the verified command.
 The service returns after its acknowledgement; slow status readback then runs
@@ -89,8 +103,9 @@ Open the integration's **Configure** options:
 
 Each normal refresh sends **three** requests: connector telemetry (`1537`),
 controller/connection status (`2560`), and configured current (`parameter 5`).
-When detailed polling is due, **three** more fetch detailed meter/pilot/phase
-measurements (`2561`), Autostart (`parameter 4`), and network status.
+When detailed polling is due, **four** more fetch detailed meter/pilot/phase
+measurements (`2561`), Autostart (`parameter 4`), network status, and
+CPU/memory/flash usage (`1536`).
 Login and identity discovery run at setup; login also runs when authentication
 is rejected. Wi-Fi scans and unrelated settings are not polled.
 

@@ -46,7 +46,7 @@
     "step": {
       "init": {
         "title": "Polling settings",
-        "description": "Status polling makes three HTTPS requests per refresh. Detailed polling adds three requests for meter readings, Autostart, and network signal. Requests run one at a time. Intervals are in seconds; detailed polling must be at least as slow as status polling. Changes reload the integration.",
+        "description": "Status polling makes three HTTPS requests per refresh. Detailed polling adds four requests for meter readings, Autostart, network signal, and CPU/memory/flash usage. Requests run one at a time. Intervals are in seconds; detailed polling must be at least as slow as status polling. Changes reload the integration.",
         "data": {
           "status_interval": "Status refresh interval (seconds)",
           "details_interval": "Detailed refresh interval (seconds)",
@@ -136,6 +136,15 @@
       },
       "phase_c_current": {
         "name": "Phase C current"
+      },
+      "cpu_usage": {
+        "name": "CPU usage"
+      },
+      "memory_usage": {
+        "name": "Memory usage"
+      },
+      "flash_usage": {
+        "name": "Flash usage"
       }
     }
   }

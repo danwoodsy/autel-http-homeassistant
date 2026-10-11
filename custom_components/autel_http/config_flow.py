@@ -9,6 +9,9 @@ from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -210,8 +213,14 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
                         default=defaults.get(
                             CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT
                         ),
-                    ): probatio.All(
-                        probatio.Coerce(int), probatio.Range(min=5, max=60)
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=5,
+                            max=60,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
                     ),
                 }
             ),

@@ -12,7 +12,10 @@ def main() -> None:
     if manifest["domain"] != "autel_http":
         raise ValueError("Unexpected integration domain")
     files = sorted(
-        path for path in component.rglob("*") if path.suffix in {".py", ".json"}
+        path
+        for path in component.rglob("*")
+        if path.suffix in {".py", ".json"}
+        or (path.parent == component / "brand" and path.suffix == ".png")
     )
     destination = root / "dist" / "autel_http.zip"
     destination.parent.mkdir(exist_ok=True)

@@ -10,6 +10,7 @@ from homeassistant.config_entries import (
     SOURCE_USER,
 )
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.selector import NumberSelector
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.autel_http.const import DOMAIN
@@ -90,6 +91,13 @@ async def test_setup_failures(hass, charger, scenario, expected):
 async def test_options_validation_and_save(hass, entry):
     form = await hass.config_entries.options.async_init(entry.entry_id)
     assert form["type"] == FlowResultType.FORM
+    timeout_selector = next(
+        value
+        for key, value in form["data_schema"].schema.items()
+        if key.schema == "request_timeout"
+    )
+    assert isinstance(timeout_selector, NumberSelector)
+    assert timeout_selector.config["mode"] == "box"
     data = {"status_interval": 60, "details_interval": 30, "request_timeout": 20}
     bad = await hass.config_entries.options.async_configure(form["flow_id"], data)
     assert bad["errors"] == {"details_interval": "details_too_fast"}
@@ -97,6 +105,8 @@ async def test_options_validation_and_save(hass, entry):
         bad["data_schema"]({**data, "status_interval": 1})
     with pytest.raises(probatio.Invalid):
         bad["data_schema"]({**data, "request_timeout": 0})
+    with pytest.raises(probatio.Invalid):
+        bad["data_schema"]({**data, "request_timeout": 61})
     good = {**data, "details_interval": 300}
     with patch.object(hass.config_entries, "async_schedule_reload") as reload:
         result = await hass.config_entries.options.async_configure(bad["flow_id"], good)

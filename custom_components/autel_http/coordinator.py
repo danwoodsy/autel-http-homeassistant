@@ -43,6 +43,7 @@ class ChargerData:
     measurements: dict = field(default_factory=dict)
     permissions: dict = field(default_factory=dict)
     network: dict = field(default_factory=dict)
+    system: dict = field(default_factory=dict)
     details_available: set[str] = field(default_factory=set)
 
 
@@ -107,6 +108,7 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
                 result.measurements = self.data.measurements
                 result.permissions = self.data.permissions
                 result.network = self.data.network
+                result.system = self.data.system
                 result.details_available = self.data.details_available.copy()
             now = monotonic()
             if (
@@ -118,15 +120,17 @@ class AutelCoordinator(DataUpdateCoordinator[ChargerData]):
                 self._last_details_attempt = now
                 # Each optional group fails independently. Cached detail values
                 # become unavailable after a failed attempt, not stale readings.
-                for group in ("measurements", "permissions", "network"):
+                for group in ("measurements", "permissions", "network", "system"):
                     try:
                         match group:
                             case "measurements":
                                 value = await self.client.realtime(2561, 60)
                             case "permissions":
                                 value = await self.client.parameters(4)
-                            case _:
+                            case "network":
                                 value = await self.client.request("get_current_network")
+                            case "system":
+                                value = await self.client.realtime(1536)
                         setattr(result, group, object_record(value))
                         result.details_available.add(group)
                     except AutelAuthError:

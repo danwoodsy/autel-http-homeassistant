@@ -13,6 +13,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
+from custom_components.autel_http.api import AutelConnectionError
 from custom_components.autel_http.const import DOMAIN
 from custom_components.autel_http.diagnostics import async_get_config_entry_diagnostics
 
@@ -69,6 +70,85 @@ async def test_entities_and_units(hass, loaded):
     assert phase.entity_category is EntityCategory.DIAGNOSTIC
     assert "pin" not in str(number.attributes)
     assert "token" not in str(number.attributes)
+
+
+async def test_visible_system_and_signal_diagnostics(hass, loaded):
+    registry = er.async_get(hass)
+    for key, expected in (("cpu_usage", 65), ("memory_usage", 37), ("flash_usage", 3)):
+        reading = state(hass, "sensor", key)
+        assert float(reading.state) == expected
+        assert reading.attributes["unit_of_measurement"] == "%"
+        assert reading.attributes["state_class"] == "measurement"
+        registered = registry.async_get(entity_id(hass, "sensor", key))
+        assert registered.entity_category is EntityCategory.DIAGNOSTIC
+        assert registered.disabled_by is None
+    signal = state(hass, "sensor", "network_signal_level")
+    assert float(signal.state) == 4
+    assert "unit_of_measurement" not in signal.attributes
+    assert (
+        registry.async_get(signal.entity_id).entity_category
+        is EntityCategory.DIAGNOSTIC
+    )
+
+
+@pytest.mark.parametrize(
+    ("previous_disabler", "expected_disabler"),
+    [
+        (er.RegistryEntryDisabler.INTEGRATION, None),
+        (er.RegistryEntryDisabler.USER, er.RegistryEntryDisabler.USER),
+    ],
+)
+async def test_existing_signal_visibility(
+    hass, entry, charger, previous_disabler, expected_disabler
+):
+    registry = er.async_get(hass)
+    registered = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{SERIAL}_network_signal_level",
+        config_entry=entry,
+        disabled_by=previous_disabler,
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get(registered.entity_id).disabled_by is expected_disabler
+    if expected_disabler is None:
+        assert float(hass.states.get(registered.entity_id).state) == 4
+
+
+async def test_system_failure_isolated_and_recovers_on_detailed_refresh(
+    hass, loaded, charger
+):
+    client = loaded.runtime_data.client
+    coordinator = loaded.runtime_data.coordinator
+    original = client.realtime
+
+    async def fail_system(code, node=10):
+        if code == 1536:
+            raise AutelConnectionError("System read timed out")
+        return await original(code, node)
+
+    with patch.object(client, "realtime", side_effect=fail_system):
+        await coordinator.async_refresh_all()
+    assert state(hass, "sensor", "cpu_usage").state == "unavailable"
+    assert state(hass, "sensor", "memory_usage").state == "unavailable"
+    assert state(hass, "sensor", "flash_usage").state == "unavailable"
+    assert state(hass, "sensor", "power").state == "3.848"
+    assert float(state(hass, "sensor", "network_signal_level").state) == 4
+    charger.system["CpuState"] = 42
+    charger.calls.clear()
+    await coordinator.async_refresh()
+    assert not any(c.get("data", {}).get("rtcode") == 1536 for c in charger.calls)
+    assert state(hass, "sensor", "cpu_usage").state == "unavailable"
+    await coordinator.async_refresh_all()
+    assert float(state(hass, "sensor", "cpu_usage").state) == 42
+
+
+async def test_missing_system_field_is_unknown(hass, loaded, charger):
+    charger.system.pop("MemState")
+    await loaded.runtime_data.coordinator.async_refresh_all()
+    assert state(hass, "sensor", "memory_usage").state == "unknown"
+    assert float(state(hass, "sensor", "cpu_usage").state) == 65
 
 
 async def test_stop_readback_keeps_vehicle_connected(hass, loaded, charger):
@@ -129,7 +209,7 @@ async def test_control_failure_does_not_change_state_or_retry(hass, loaded, char
 async def test_status_and_detail_cadence(hass, loaded, charger):
     coordinator = loaded.runtime_data.coordinator
     assert coordinator.update_interval == timedelta(seconds=30)
-    assert len(charger.calls) == 8  # login + identity + six read-only poll requests
+    assert len(charger.calls) == 9  # login + identity + seven read-only poll requests
     charger.calls.clear()
     with patch("custom_components.autel_http.coordinator.monotonic", return_value=100):
         coordinator._last_details_attempt = 90
@@ -143,8 +223,13 @@ async def test_status_and_detail_cadence(hass, loaded, charger):
     charger.calls.clear()
     with patch("custom_components.autel_http.coordinator.monotonic", return_value=211):
         await coordinator.async_refresh()
-    assert len(charger.calls) == 6
+    assert len(charger.calls) == 7
     assert charger.calls[3]["data"]["rtcode"] == 2561
+    assert charger.calls[6]["data"] == {
+        "sn": SERIAL,
+        "nodeid": 10,
+        "rtcode": 1536,
+    }
     charger.calls.clear()
     await hass.services.async_call(
         "button",
@@ -152,7 +237,7 @@ async def test_status_and_detail_cadence(hass, loaded, charger):
         {"entity_id": entity_id(hass, "button", "refresh")},
         blocking=True,
     )
-    assert len(charger.calls) == 6
+    assert len(charger.calls) == 7
 
 
 async def test_normal_poll_timer_uses_configured_interval(
@@ -351,11 +436,15 @@ async def test_download_diagnostics_is_cached_and_omits_credentials(
     data.telemetry["token"] = "sensitive-token"
     data.telemetry["pin"] = "sensitive-pin"
     data.measurements["sn"] = SERIAL
+    data.system["token"] = "sensitive-token"
+    data.system["pin"] = "sensitive-pin"
     count = len(charger.calls)
     diagnostics = await async_get_config_entry_diagnostics(hass, loaded)
     assert len(charger.calls) == count
     assert diagnostics["device"]["model"] == "EW07-C050000A002"
     assert diagnostics["readings"]["telemetry"]["power"] == 3848
+    assert diagnostics["readings"]["system"]["CpuState"] == 65
+    assert diagnostics["readings"]["system"]["OcppState"] == 0
     serialized = json.dumps(diagnostics)
     for forbidden in (
         "sensitive-token",
@@ -410,4 +499,4 @@ async def test_automatic_polling_can_be_disabled(hass, charger, entry, freezer):
         {"entity_id": entity_id(hass, "button", "refresh")},
         blocking=True,
     )
-    assert len(charger.calls) == 6
+    assert len(charger.calls) == 7

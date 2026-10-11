@@ -49,6 +49,16 @@ FIELDS = {
     ),
     "permissions": ("CustomizedPnC",),
     "network": ("networkType", "signalLevel"),
+    "system": (
+        "CpuState",
+        "FlashState",
+        "MemState",
+        "OcppState",
+        "LedBoardState",
+        "PileWorkState",
+        "PosCommState",
+        "RfidCommState",
+    ),
 }
 
 

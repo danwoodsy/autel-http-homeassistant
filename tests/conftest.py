@@ -71,6 +71,16 @@ class FakeCharger:
         }
         self.current = {"connectorId": 1, "maxCurr": 16.0, "offlineCurr": "32"}
         self.permissions = {"CustomizedPnC": 2}
+        self.system = {
+            "CpuState": 65,
+            "FlashState": 3,
+            "MemState": 37,
+            "OcppState": 0,
+            "LedBoardState": 0,
+            "PileWorkState": 0,
+            "PosCommState": 1,
+            "RfidCommState": 0,
+        }
 
     async def handle(self, method, url, payload):
         self.calls.append(deepcopy(payload))
@@ -112,16 +122,17 @@ class FakeCharger:
                     args = payload["data"]
                     assert args["sn"] == SERIAL
                     code = args["rtcode"]
-                    assert code in (1537, 2560, 2561)
-                    assert args["nodeid"] == (10 if code == 1537 else 60)
+                    assert code in (1536, 1537, 2560, 2561)
+                    assert args["nodeid"] == (10 if code in (1536, 1537) else 60)
                     value = {
+                        1536: self.system,
                         1537: [self.telemetry],
                         2560: self.controller,
                         2561: self.measurements,
                     }[code]
                     # Captured CCU replies echo node 10, without a code field.
                     data = {"nodeid": 10, "sn": SERIAL, "value": value}
-                    if code == 1537:
+                    if code in (1536, 1537):
                         data["code"] = code
                 case "debug_ctrl_pile_charge":
                     args = payload["data"]

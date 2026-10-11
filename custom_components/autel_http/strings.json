@@ -1,0 +1,142 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your Autel charger",
+        "description": "Enter the charger's local HTTPS address and web login PIN. Certificate verification is off by default for the charger's self-signed certificate. Setup only reads settings; it does not start or stop charging.",
+        "data": {
+          "host": "IP address or hostname",
+          "username": "Username",
+          "pin": "PIN Code",
+          "verify_ssl": "Verify HTTPS certificate"
+        }
+      },
+      "reconfigure": {
+        "title": "Change charger connection",
+        "description": "Leave PIN Code blank to keep the saved PIN. The address must belong to the same charger.",
+        "data": {
+          "host": "IP address or hostname",
+          "username": "Username",
+          "pin": "PIN Code",
+          "verify_ssl": "Verify HTTPS certificate"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in to your charger again",
+        "description": "The charger rejected the saved credentials. Enter its current web login PIN.",
+        "data": {
+          "username": "Username",
+          "pin": "PIN Code"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The charger rejected the username or PIN.",
+      "cannot_connect": "Cannot reach the charger. Check its address, HTTPS access, and certificate setting.",
+      "invalid_host": "Enter an IP address or hostname, optionally with an HTTPS port. Paths, credentials, and HTTP URLs are not supported.",
+      "invalid_response": "The charger returned an unexpected or unsuccessful response.",
+      "unsupported_charger": "This integration supports the verified single-connector AC MaxiCharger interface. This charger has a different connector layout or rating."
+    },
+    "abort": {
+      "already_configured": "This charger is already configured.",
+      "unique_id_mismatch": "The address belongs to a different charger."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling settings",
+        "description": "Status polling makes three HTTPS requests per refresh. Detailed polling adds three requests for meter readings, Autostart, and network signal. Requests run one at a time. Intervals are in seconds; detailed polling must be at least as slow as status polling. Changes reload the integration.",
+        "data": {
+          "status_interval": "Status refresh interval (seconds)",
+          "details_interval": "Detailed refresh interval (seconds)",
+          "request_timeout": "Timeout per HTTPS request (seconds)"
+        }
+      }
+    },
+    "error": {
+      "details_too_fast": "Detailed refresh must be at least as slow as status refresh."
+    }
+  },
+  "entity": {
+    "number": {
+      "current_limit": {
+        "name": "Current limit"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      },
+      "start_charging": {
+        "name": "Start charging"
+      },
+      "stop_charging": {
+        "name": "Stop charging"
+      }
+    },
+    "binary_sensor": {
+      "vehicle_connected": {
+        "name": "Vehicle connected"
+      },
+      "autostart": {
+        "name": "Autostart"
+      },
+      "charging": {
+        "name": "Charging"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "idle": "Idle",
+          "preparing": "Preparing",
+          "charging": "Charging",
+          "suspended_by_charger": "Suspended by charger",
+          "suspended_by_vehicle": "Suspended by vehicle",
+          "completed": "Completed",
+          "reserved": "Reserved",
+          "unavailable": "Unavailable",
+          "fault": "Fault"
+        }
+      },
+      "power": {
+        "name": "Charging power"
+      },
+      "current": {
+        "name": "Charging current"
+      },
+      "voltage": {
+        "name": "Supply voltage"
+      },
+      "session_energy": {
+        "name": "Session energy"
+      },
+      "session_duration": {
+        "name": "Session duration"
+      },
+      "meter_energy": {
+        "name": "Meter energy"
+      },
+      "pilot_duty_cycle": {
+        "name": "Pilot duty cycle"
+      },
+      "pilot_voltage": {
+        "name": "Pilot voltage"
+      },
+      "network_signal_level": {
+        "name": "Network signal level"
+      },
+      "phase_a_current": {
+        "name": "Phase A current"
+      },
+      "phase_b_current": {
+        "name": "Phase B current"
+      },
+      "phase_c_current": {
+        "name": "Phase C current"
+      }
+    }
+  }
+}

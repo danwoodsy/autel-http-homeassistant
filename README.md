@@ -55,7 +55,7 @@ of the Sigenergy example:
 | Controls | **Start charging**, **Stop charging** buttons |
 | Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps; **Autostart** on/off switch |
 | Sensors | **Status**, **Charging**, **Vehicle connected**, **Charging power** (kW), **Charging current** (A), **Supply voltage** (V), **Session energy** (kWh), **Session duration**, **Meter energy** (kWh) |
-| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Wi-Fi signal quality**, **Network signal level** (0–4), **HTTP requests per minute**, **Autostart** (read-only), **Refresh**, download diagnostics |
+| Diagnostic | **Autostart** (read-only), **CPU usage**, **Flash usage**, **HTTP requests per minute**, **Memory usage**, **Network signal quality**, **Refresh**, download diagnostics |
 | Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle |
 
 The current limit is further capped by the discovered connector rating and
@@ -69,15 +69,21 @@ units confirmed by the charger's frontend. Network signal is the reported
 detailed refresh interval. Other group-1536 fields, including `OcppState` and
 `LedBoardState`, are retained in downloaded diagnostics as raw codes. The
 frontend describes OCPP state 0 as Normal; it does not establish a live OCPP
-connection. Upgrading enables a network signal entity previously disabled by
-the integration default while preserving explicit user disables.
+connection. Home Assistant sorts the diagnostic entities alphabetically;
+with the default names, **Refresh** appears last.
 
-**Wi-Fi signal quality** uses the charger's own frontend labels: **0 = Very poor,
-1 = Weak, 2 = Fair, 3 = Good, 4 = Very good**. It reads the same cached network
-response as the numeric signal sensor and makes no additional requests. Signal
-quality is unknown for an unrecognized level or when the active network is not
-Wi-Fi. The level does not identify the Wi-Fi band or give an exact dBm value.
-The numeric **Network signal level** entity is preserved for existing automations.
+**Network signal quality** displays the Wi-Fi level using these simplified
+labels: **4 = very good, 3 = good, 2 = average, 1 = poor, 0 = very poor**.
+Its `signal_level` attribute contains the original numeric level. Both use the
+same cached network response, with no additional requests. Quality is unknown
+for an unrecognized level or when the active network is not Wi-Fi. The level
+does not identify the Wi-Fi band or give an exact dBm value.
+
+Upgrading removes the separate **Network signal level** entity. If an automation
+used that entity, read the combined sensor's `signal_level` attribute instead.
+The existing Wi-Fi quality entity keeps its entity ID and any user customization.
+Its internal enum states remain `very_poor`, `weak`, `fair`, `good`, `very_good`
+for existing automations; the displayed labels use the wording above.
 
 The integration bundles its own charger/HTTPS icon in `brand/icon.png`, used
 by Home Assistant's local brand-image support and included in the manual ZIP.
@@ -121,8 +127,17 @@ measurement statistics. Temperature is omitted because its raw scale is unverifi
 Open the integration's **Configure** options:
 
 Choose **High**, **Medium**, **Low**, or **Custom**, and set the timeout for each
-HTTPS request. **Medium** is the recommended starting point. **Custom** opens
-six numeric interval settings, each with an explanation and seconds beside it.
+HTTPS request. **Medium** is the recommended starting point. Press **Next** to
+save a High, Medium, or Low preset and the timeout.
+
+To configure **Custom**:
+
+1. Select **Custom** and press **Next**. Changing the dropdown alone does not
+   open the interval fields.
+2. Edit the six numeric intervals on the **Custom polling intervals** page;
+   each field includes an explanation and seconds beside it.
+3. Press **Submit** to save. Until then, the existing settings remain active.
+
 Saving reloads the integration without changing charger settings.
 
 After an update, restart Home Assistant fully and refresh your browser to load

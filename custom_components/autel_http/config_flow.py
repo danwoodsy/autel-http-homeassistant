@@ -195,6 +195,7 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
             return self.async_create_entry(data=user_input)
         return self.async_show_form(
             step_id="init",
+            last_step=False,
             data_schema=probatio.Schema(
                 {
                     probatio.Required(
@@ -265,6 +266,7 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
         }
         return self.async_show_form(
             step_id="custom",
+            last_step=True,
             data_schema=probatio.Schema(
                 {
                     probatio.Required(

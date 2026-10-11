@@ -32,7 +32,8 @@ MIN_CHARGING_INTERVAL = 5
 MIN_CURRENT = 6
 MAX_CURRENT = 32
 
-# The charger's frontend labels its Wi-Fi signal levels with these terms.
+# Preserve the original enum states for automations; translations provide
+# the simplified signal-quality labels shown on the device page.
 WIFI_SIGNAL_QUALITY = {
     0: "very_poor",
     1: "weak",

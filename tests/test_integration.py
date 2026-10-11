@@ -82,24 +82,30 @@ async def test_visible_system_and_signal_diagnostics(hass, loaded):
         registered = registry.async_get(entity_id(hass, "sensor", key))
         assert registered.entity_category is EntityCategory.DIAGNOSTIC
         assert registered.disabled_by is None
-    signal = state(hass, "sensor", "network_signal_level")
-    assert float(signal.state) == 4
+    signal = state(hass, "sensor", "wifi_signal_quality")
+    assert signal.state == "very_good"
+    assert signal.attributes["signal_level"] == 4
     assert "unit_of_measurement" not in signal.attributes
     assert (
         registry.async_get(signal.entity_id).entity_category
         is EntityCategory.DIAGNOSTIC
     )
+    assert (
+        registry.async_get_entity_id("sensor", DOMAIN, f"{SERIAL}_network_signal_level")
+        is None
+    )
 
 
 @pytest.mark.parametrize(
-    ("previous_disabler", "expected_disabler"),
+    "previous_disabler",
     [
-        (er.RegistryEntryDisabler.INTEGRATION, None),
-        (er.RegistryEntryDisabler.USER, er.RegistryEntryDisabler.USER),
+        None,
+        er.RegistryEntryDisabler.INTEGRATION,
+        er.RegistryEntryDisabler.USER,
     ],
 )
-async def test_existing_signal_visibility(
-    hass, entry, charger, previous_disabler, expected_disabler
+async def test_signal_merge_preserves_quality_entity(
+    hass, entry, charger, previous_disabler
 ):
     registry = er.async_get(hass)
     registered = registry.async_get_or_create(
@@ -109,11 +115,57 @@ async def test_existing_signal_visibility(
         config_entry=entry,
         disabled_by=previous_disabler,
     )
+    quality = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{SERIAL}_wifi_signal_quality",
+        config_entry=entry,
+        suggested_object_id="my_charger_wifi",
+        disabled_by=(
+            er.RegistryEntryDisabler.USER
+            if previous_disabler is er.RegistryEntryDisabler.USER
+            else None
+        ),
+    )
+    registry.async_update_entity(quality.entity_id, name="My Wi-Fi quality")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert registry.async_get(registered.entity_id).disabled_by is expected_disabler
-    if expected_disabler is None:
-        assert float(hass.states.get(registered.entity_id).state) == 4
+    assert registry.async_get(registered.entity_id) is None
+    assert hass.states.get(registered.entity_id) is None
+    retained = registry.async_get(quality.entity_id)
+    assert retained is not None
+    assert retained.name == "My Wi-Fi quality"
+    assert retained.disabled_by is quality.disabled_by
+    assert entity_id(hass, "sensor", "wifi_signal_quality") == quality.entity_id
+    if retained.disabled_by is None:
+        assert hass.states.get(quality.entity_id).attributes["signal_level"] == 4
+
+
+@pytest.mark.parametrize(
+    ("network_type", "level", "expected_state", "expected_level"),
+    [
+        (4, 0, "very_poor", 0),
+        (4, 4, "very_good", 4),
+        (4, 4.5, "unknown", None),
+        (4, None, "unknown", None),
+        (2, 4, "unknown", 4),
+    ],
+)
+async def test_combined_signal_attributes(
+    hass, loaded, charger, network_type, level, expected_state, expected_level
+):
+    charger.overrides["get_current_network"] = [
+        {
+            "cmd": "get_current_network",
+            "data": {"networkType": network_type, "signalLevel": level},
+            "errcode": "0",
+            "success": "1",
+        }
+    ]
+    await loaded.runtime_data.coordinator.async_refresh_all()
+    quality = state(hass, "sensor", "wifi_signal_quality")
+    assert quality.state == expected_state
+    assert quality.attributes["signal_level"] == expected_level
 
 
 async def test_system_failure_isolated_and_recovers_on_detailed_refresh(
@@ -134,7 +186,7 @@ async def test_system_failure_isolated_and_recovers_on_detailed_refresh(
     assert state(hass, "sensor", "memory_usage").state == "unavailable"
     assert state(hass, "sensor", "flash_usage").state == "unavailable"
     assert state(hass, "sensor", "power").state == "3.848"
-    assert float(state(hass, "sensor", "network_signal_level").state) == 4
+    assert state(hass, "sensor", "wifi_signal_quality").state == "very_good"
     charger.system["CpuState"] = 42
     charger.calls.clear()
     await coordinator.async_refresh()

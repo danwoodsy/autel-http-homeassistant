@@ -92,6 +92,7 @@ async def test_setup_failures(hass, charger, scenario, expected):
 async def test_options_validation_and_save(hass, entry):
     form = await hass.config_entries.options.async_init(entry.entry_id)
     assert form["type"] == FlowResultType.FORM
+    assert form["last_step"] is False
     timeout_selector = next(
         value
         for key, value in form["data_schema"].schema.items()
@@ -113,6 +114,8 @@ async def test_options_validation_and_save(hass, entry):
         form["flow_id"], {"polling_preset": "custom", "request_timeout": 20}
     )
     assert custom["step_id"] == "custom"
+    assert custom["last_step"] is True
+    assert entry.options == {}
     data = {
         "unplugged_interval": 20,
         "unplugged_status_interval": 120,

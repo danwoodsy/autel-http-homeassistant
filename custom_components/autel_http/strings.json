@@ -46,13 +46,13 @@
     "step": {
       "init": {
         "title": "Polling settings",
-        "description": "Choose a polling preset. Medium checks for a vehicle every 20 s while unplugged, polls a connected vehicle every 20 s, and polls charging every 10 s. High refreshes faster; Low reduces traffic and keeps unplugged detection at 30 s. Custom exposes six intervals.\n\nIntervals are waits after each refresh finishes, so response time adds to the effective delay. Saving reloads the integration without changing charger settings.",
+        "description": "Choose a polling preset. Medium checks for a vehicle every 20 s while unplugged, polls a connected vehicle every 20 s, and polls charging every 10 s. High refreshes faster; Low reduces traffic and keeps unplugged detection at 30 s.\n\nFor Custom, select it and press Next to open six interval fields. Submit on that second page saves your settings. For High, Medium or Low, Next saves the preset and timeout immediately.\n\nIntervals are waits after each refresh finishes, so response time adds to the effective delay. Saving reloads the integration without changing charger settings.",
         "data": {
           "polling_preset": "Polling rate",
           "request_timeout": "HTTPS request timeout"
         },
         "data_description": {
-          "polling_preset": "Medium is recommended. Unplugged telemetry and diagnostics refresh less often than connection checks. Existing numeric settings are retained as Custom; choose Medium to adopt the recommended schedule.",
+          "polling_preset": "Medium is recommended. Select Custom, then press Next to edit six individual intervals. Existing numeric settings are retained as Custom; choose Medium to adopt the recommended schedule.",
           "request_timeout": "Maximum time to wait for each HTTPS request. Recommended: 15 s; normal telemetry can take 2-3 s. Increase if requests time out. This changes the allowed response time, not the polling rate."
         }
       },
@@ -156,9 +156,6 @@
       "pilot_voltage": {
         "name": "Pilot voltage"
       },
-      "network_signal_level": {
-        "name": "Network signal level"
-      },
       "phase_a_current": {
         "name": "Phase A current"
       },
@@ -181,13 +178,13 @@
         "name": "HTTP requests per minute"
       },
       "wifi_signal_quality": {
-        "name": "Wi-Fi signal quality",
+        "name": "Network signal quality",
         "state": {
-          "very_poor": "Very poor",
-          "weak": "Weak",
-          "fair": "Fair",
-          "good": "Good",
-          "very_good": "Very good"
+          "very_poor": "very poor",
+          "weak": "poor",
+          "fair": "average",
+          "good": "good",
+          "very_good": "very good"
         }
       }
     }

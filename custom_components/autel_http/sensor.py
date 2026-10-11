@@ -152,14 +152,6 @@ SENSORS = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AutelSensorDescription(
-        key="network_signal_level",
-        translation_key="network_signal_level",
-        group="network",
-        field="signalLevel",
-        icon="mdi:signal",
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    AutelSensorDescription(
         key="wifi_signal_quality",
         translation_key="wifi_signal_quality",
         group="network",
@@ -191,8 +183,9 @@ async def async_setup_entry(
     entry: AutelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    # Version 0.1.0 disabled signal visibility by default. Enable that default
-    # on upgrade, while preserving any explicit user choice to disable it.
+    # The signal quality entity now includes the raw level as an attribute.
+    # Remove the superseded entity while retaining the quality entity's ID
+    # and any user customization.
     registry = er.async_get(hass)
     info = entry.runtime_data.client.info
     assert info is not None
@@ -201,11 +194,8 @@ async def async_setup_entry(
     )
     if entity_id is not None:
         registered = registry.async_get(entity_id)
-        if (
-            registered
-            and registered.disabled_by is er.RegistryEntryDisabler.INTEGRATION
-        ):
-            registry.async_update_entity(entity_id, disabled_by=None)
+        if registered and registered.config_entry_id == entry.entry_id:
+            registry.async_remove(entity_id)
     async_add_entities(
         [
             AutelSensor(entry.runtime_data.coordinator, description)
@@ -243,6 +233,13 @@ class AutelSensor(AutelEntity, SensorEntity):
                 return None
             return WIFI_SIGNAL_QUALITY.get(value)
         return value * description.scale if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int | None] | None:
+        if self.entity_description.key != "wifi_signal_quality":
+            return None
+        level = numeric(self.coordinator.data.network.get("signalLevel"))
+        return {"signal_level": int(level) if level in WIFI_SIGNAL_QUALITY else None}
 
 
 class AutelRequestRate(AutelEntity, SensorEntity):

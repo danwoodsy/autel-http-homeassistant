@@ -3,6 +3,16 @@
 Version numbers below identify integration revisions. GitHub releases will use
 matching `v` tags, for example `v0.1.3` for manifest version `0.1.3`.
 
+## 0.1.6 — 2026-10-11
+
+- Merge signal diagnostics into Network signal quality with the raw 0–4 level
+  as an attribute. Remove the duplicate numeric entity on upgrade and retain
+  the quality entity's ID and user customization.
+- Display signal quality as very good, good, average, poor, or very poor.
+  The combined sensor's name places Refresh last in the default diagnostic list.
+- Show Next on the polling preset page and explain how Custom opens the six
+  interval fields, followed by Submit to save.
+
 ## 0.1.5 — 2026-10-11
 
 - Add an Autostart configuration switch using HTTPS parameter 4, with 0 for off

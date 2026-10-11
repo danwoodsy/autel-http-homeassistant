@@ -1,4 +1,4 @@
-"""Autel Charger HTTPS integration."""
+"""Autel MaxiCharger over HTTPS integration for Home Assistant."""
 
 from dataclasses import dataclass
 

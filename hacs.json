@@ -1,5 +1,5 @@
 {
-  "name": "Autel Charger HTTPS",
+  "name": "Autel MaxiCharger over HTTPS",
   "homeassistant": "2026.10.0",
   "render_readme": true
 }

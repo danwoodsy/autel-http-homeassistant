@@ -1,4 +1,6 @@
-# Autel Charger HTTPS for Home Assistant
+# Autel MaxiCharger over HTTPS for Home Assistant
+
+`autel-maxicharger-ha` provides local HTTPS control and sensors for Home Assistant.
 
 Control an Autel MaxiCharger through its local `https://<charger>/localcfg`
 interface. Start/stop and current-limit commands were verified on a single AC
@@ -6,16 +8,27 @@ charger, model **EW07-C050000A002**, firmware **V1.05.38**. Home Assistant
 **2026.10 or newer** is required; the automated tests run against 2026.10.0.
 Other firmware/models need validation against the same interface.
 
-## Install and configure
+## Install through HACS
+
+1. Open **HACS → ⋮ → Custom repositories**.
+2. Add `https://github.com/danwoodsy/autel-maxicharger-ha` with type
+   **Integration**.
+3. Find **Autel MaxiCharger over HTTPS** in HACS and select **Download**.
+4. Restart Home Assistant, then follow the configuration steps below.
+
+## Manual installation
 
 1. Copy `custom_components/autel_http` into your Home Assistant configuration
    directory, giving `/config/custom_components/autel_http/manifest.json`.
    The packaged ZIP contains this directory layout; extract it into `/config`.
 2. Restart Home Assistant.
-3. Open **Settings → Devices & services → Add integration → Autel Charger HTTPS**.
-4. Enter the charger's **IP address or hostname**, **username** (usually `admin`),
+
+## Configure
+
+1. Open **Settings → Devices & services → Add integration → Autel MaxiCharger over HTTPS**.
+2. Enter the charger's **IP address or hostname**, **username** (usually `admin`),
    and **PIN Code** used by its local web page. Do not enter a token or hash.
-5. Leave **Verify HTTPS certificate** off for the charger's self-signed certificate.
+3. Leave **Verify HTTPS certificate** off for the charger's self-signed certificate.
    Enable it if the charger uses a certificate trusted by Home Assistant.
 
 The address accepts a hostname/IP, an HTTPS origin, or a nondefault port such as
@@ -23,8 +36,8 @@ The address accepts a hostname/IP, an HTTPS origin, or a nondefault port such as
 Setup reads identity and settings; adding/reloading the integration does not
 start, stop, or change the current limit. Serial/model/firmware are discovered.
 
-Once the repository is available on GitHub, it can also be added to HACS as
-the custom **Integration** repository `danwoodsy/autel-http-homeassistant`.
+The Home Assistant integration domain remains `autel_http`, so the project
+rename preserves existing configuration entries and entity IDs.
 
 Use the integration's **Reconfigure** menu to change the address, username, PIN,
 or certificate setting. Leave the PIN blank there to retain the saved PIN.

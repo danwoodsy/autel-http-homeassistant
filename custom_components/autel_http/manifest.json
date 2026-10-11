@@ -1,11 +1,11 @@
 {
   "domain": "autel_http",
-  "name": "Autel Charger HTTPS",
+  "name": "Autel MaxiCharger over HTTPS",
   "codeowners": ["@danwoodsy"],
   "config_flow": true,
-  "documentation": "https://github.com/danwoodsy/autel-http-homeassistant",
+  "documentation": "https://github.com/danwoodsy/autel-maxicharger-ha",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/danwoodsy/autel-http-homeassistant/issues",
+  "issue_tracker": "https://github.com/danwoodsy/autel-maxicharger-ha/issues",
   "requirements": [],
   "version": "0.1.0"
 }

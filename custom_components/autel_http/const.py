@@ -1,4 +1,4 @@
-"""Constants for the local Autel HTTPS integration."""
+"""Constants for the Autel MaxiCharger over HTTPS integration."""
 
 from homeassistant.const import Platform
 

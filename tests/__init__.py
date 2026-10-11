@@ -1,1 +1,1 @@
-"""Tests for the Autel HTTPS integration."""
+"""Tests for the Autel MaxiCharger over HTTPS integration."""

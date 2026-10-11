@@ -98,21 +98,49 @@ async def test_options_validation_and_save(hass, entry):
     )
     assert isinstance(timeout_selector, NumberSelector)
     assert timeout_selector.config["mode"] == "box"
-    data = {"status_interval": 60, "details_interval": 30, "request_timeout": 20}
+    assert form["data_schema"]({}) == {
+        "charging_interval": 10,
+        "status_interval": 60,
+        "details_interval": 120,
+        "request_timeout": 15,
+    }
+    data = {
+        "charging_interval": 10,
+        "status_interval": 60,
+        "details_interval": 30,
+        "request_timeout": 20,
+    }
     bad = await hass.config_entries.options.async_configure(form["flow_id"], data)
     assert bad["errors"] == {"details_interval": "details_too_fast"}
     with pytest.raises(probatio.Invalid):
         bad["data_schema"]({**data, "status_interval": 1})
     with pytest.raises(probatio.Invalid):
+        bad["data_schema"]({**data, "charging_interval": 4})
+    with pytest.raises(probatio.Invalid):
         bad["data_schema"]({**data, "request_timeout": 0})
     with pytest.raises(probatio.Invalid):
         bad["data_schema"]({**data, "request_timeout": 61})
-    good = {**data, "details_interval": 300}
+    slow_charging = await hass.config_entries.options.async_configure(
+        bad["flow_id"], {**data, "details_interval": 300, "charging_interval": 61}
+    )
+    assert slow_charging["errors"] == {"charging_interval": "charging_too_slow"}
+    good = {**data, "details_interval": 300, "charging_interval": 5}
     with patch.object(hass.config_entries, "async_schedule_reload") as reload:
         result = await hass.config_entries.options.async_configure(bad["flow_id"], good)
         assert result["type"] == FlowResultType.CREATE_ENTRY
         assert entry.options == good
         reload.assert_called_once_with(entry.entry_id)
+
+
+async def test_options_preserve_existing_idle_interval(hass, entry):
+    hass.config_entries.async_update_entry(
+        entry, options={"status_interval": 30, "details_interval": 300}
+    )
+    form = await hass.config_entries.options.async_init(entry.entry_id)
+    defaults = form["data_schema"]({})
+    assert defaults["status_interval"] == 30
+    assert defaults["details_interval"] == 300
+    assert defaults["charging_interval"] == 10
 
 
 async def test_reconfigure_preserves_pin(hass, entry, charger):

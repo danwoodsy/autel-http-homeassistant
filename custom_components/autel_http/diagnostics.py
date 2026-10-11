@@ -76,8 +76,14 @@ async def async_get_config_entry_diagnostics(
             "rated_current": info.rated_current,
         },
         "connection": {"verify_ssl": entry.data.get(CONF_VERIFY_SSL, False)},
+        "http": {
+            "requests_last_minute": coordinator.client.requests_last_minute,
+            "last_request_duration": coordinator.client.last_request_duration,
+        },
         "polling": {
-            "status_interval": coordinator.update_interval.total_seconds(),
+            "status_interval": coordinator.status_interval,
+            "charging_interval": coordinator.charging_interval,
+            "active_interval": coordinator.update_interval.total_seconds(),
             "details_interval": coordinator.details_interval,
             "last_update_success": coordinator.last_update_success,
             "available_detail_groups": sorted(data.details_available),

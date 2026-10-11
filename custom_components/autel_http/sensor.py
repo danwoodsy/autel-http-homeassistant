@@ -1,6 +1,7 @@
 """Charging measurements with verified units and conservative energy metadata."""
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,10 +17,11 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 
 from . import AutelConfigEntry
 from .api import numeric
@@ -195,8 +197,11 @@ async def async_setup_entry(
         ):
             registry.async_update_entity(entity_id, disabled_by=None)
     async_add_entities(
-        AutelSensor(entry.runtime_data.coordinator, description)
-        for description in SENSORS
+        [
+            AutelSensor(entry.runtime_data.coordinator, description)
+            for description in SENSORS
+        ]
+        + [AutelRequestRate(entry.runtime_data.coordinator)]
     )
 
 
@@ -224,3 +229,39 @@ class AutelSensor(AutelEntity, SensorEntity):
         if description.key == "status":
             return CHARGER_STATES.get(value)
         return value * description.scale if value is not None else None
+
+
+class AutelRequestRate(AutelEntity, SensorEntity):
+    """Publish a local rolling count, including when charger polling is disabled."""
+
+    _attr_translation_key = "http_requests_per_minute"
+    _attr_icon = "mdi:web"
+    _attr_native_unit_of_measurement = "requests/min"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: AutelCoordinator) -> None:
+        super().__init__(coordinator, "http_requests_per_minute")
+
+    @property
+    def available(self) -> bool:
+        # A local counter remains useful when HTTP requests fail.
+        return True
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.client.requests_last_minute
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_interval(
+                self.hass, self._publish_count, timedelta(seconds=60)
+            )
+        )
+
+    @callback
+    def _publish_count(self, _: datetime) -> None:
+        # This updates the cached HA state without making any HTTP request.
+        self.async_write_ha_state()

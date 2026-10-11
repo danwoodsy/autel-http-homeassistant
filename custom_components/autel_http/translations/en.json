@@ -46,16 +46,18 @@
     "step": {
       "init": {
         "title": "Polling settings",
-        "description": "Status polling makes three HTTPS requests per refresh. Detailed polling adds four requests for meter readings, Autostart, network signal, and CPU/memory/flash usage. Requests run one at a time. Intervals are in seconds; detailed polling must be at least as slow as status polling. Changes reload the integration.",
+        "description": "Status polling makes two HTTPS requests per refresh, using the charging interval while charging and the idle interval otherwise. Detailed polling adds five requests for the current limit, meter readings, Autostart, network signal, and CPU/memory/flash usage. Requests run one at a time; the interval starts after a refresh finishes. Detailed polling must be at least as slow as idle polling. Changes reload the integration.",
         "data": {
-          "status_interval": "Status refresh interval (seconds)",
+          "charging_interval": "Whilst charging refresh interval (seconds)",
+          "status_interval": "Idle status refresh interval (seconds)",
           "details_interval": "Detailed refresh interval (seconds)",
           "request_timeout": "Timeout per HTTPS request (seconds)"
         }
       }
     },
     "error": {
-      "details_too_fast": "Detailed refresh must be at least as slow as status refresh."
+      "details_too_fast": "Detailed refresh must be at least as slow as idle status refresh.",
+      "charging_too_slow": "Charging refresh must be at least as fast as idle status refresh."
     }
   },
   "entity": {
@@ -145,6 +147,9 @@
       },
       "flash_usage": {
         "name": "Flash usage"
+      },
+      "http_requests_per_minute": {
+        "name": "HTTP requests per minute"
       }
     }
   }

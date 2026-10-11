@@ -55,7 +55,7 @@ of the Sigenergy example:
 | Controls | **Start charging**, **Stop charging** buttons |
 | Configuration | **Current limit**, a numeric input from 6–32 A in 1 A steps |
 | Sensors | **Status**, **Charging**, **Vehicle connected**, **Charging power** (kW), **Charging current** (A), **Supply voltage** (V), **Session energy** (kWh), **Session duration**, **Meter energy** (kWh) |
-| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Network signal level** (0–4), **Autostart** (read-only), **Refresh**, download diagnostics |
+| Diagnostic | **CPU usage**, **Memory usage**, **Flash usage** (%), **Network signal level** (0–4), **HTTP requests per minute**, **Autostart** (read-only), **Refresh**, download diagnostics |
 | Diagnostic, initially disabled | Phase A/B/C current, pilot voltage/duty cycle |
 
 The current limit is further capped by the discovered connector rating and
@@ -97,21 +97,41 @@ Open the integration's **Configure** options:
 
 | Option | Default | Allowed |
 | --- | --- | --- |
-| Status refresh interval | 30 seconds | 15–3,600 seconds |
-| Detailed refresh interval | 120 seconds | Status interval–86,400 seconds |
+| Whilst charging refresh interval | 10 seconds | 5–3,600 seconds; no slower than idle |
+| Idle status refresh interval | 60 seconds | 15–3,600 seconds |
+| Detailed refresh interval | 120 seconds | Idle interval–86,400 seconds |
 | Timeout per HTTPS request | 15 seconds | 5–60 seconds |
 
-Each normal refresh sends **three** requests: connector telemetry (`1537`),
-controller/connection status (`2560`), and configured current (`parameter 5`).
-When detailed polling is due, **four** more fetch detailed meter/pilot/phase
-measurements (`2561`), Autostart (`parameter 4`), network status, and
-CPU/memory/flash usage (`1536`).
+Each normal refresh sends **two** requests: connector telemetry (`1537`, node 10)
+and controller/connection status (`2560`, node 60). Group `1537` supplies charging
+state, power, current, supply voltage, session energy, and elapsed time. Group
+`2560` supplies the control-pilot state used to distinguish a stopped, plugged-in
+vehicle from an unplugged one. Group `2561` supplies additional phase, pilot,
+and meter readings, so it belongs on the slower detailed interval.
+
+Polling automatically switches to the charging interval when `1537` reports
+charging (`if_work_st: 2`), and to the idle interval for all other states. Set the
+charging interval to **5, 10, or 15 seconds** as preferred; 10 seconds is the
+default starting point for the small server. Existing saved status intervals
+become the idle interval unchanged. An external start, such as from the Autel
+app, is detected on the next idle poll. Home Assistant start/stop commands
+request immediate status readback. A failed status poll backs off to the idle
+interval until a successful poll establishes the charger state again.
+
+When detailed polling is due, **five** more requests fetch configured current
+(`parameter 5`), detailed meter/pilot/phase measurements (`2561`), Autostart
+(`parameter 4`), network status, and CPU/memory/flash usage (`1536`). A current-limit
+change requests immediate configured-current readback as well as status, without
+refreshing unrelated diagnostics. Changes made in another app appear on the
+next detailed poll or when you press **Refresh**.
 Login and identity discovery run at setup; login also runs when authentication
 is rejected. Wi-Fi scans and unrelated settings are not polled.
 
 Requests run **one at a time**. A new normal interval starts after the previous
 refresh finishes, so slow replies lengthen the effective interval and never
-create overlapping polls. Detailed intervals are checked during normal polls;
+create overlapping polls. For example, a 5-second setting with two 2–3-second
+responses gives about 9–11 seconds between normal refresh starts; a detailed
+refresh takes longer. Detailed intervals are checked during normal polls;
 they are approximate and can be longer than the selected interval. A pending
 control gets a turn after the current HTTP request finishes. **Refresh** requests
 a full refresh; repeated presses within one second are combined. Accepted
@@ -157,6 +177,43 @@ start/stop or current-limit commands; coordinate your automations accordingly.
 
 For troubleshooting, **Download diagnostics** uses cached measurements and makes
 no extra charger requests. PIN, token, address, username, and serial are omitted.
+
+## Request counter and debug logging
+
+**HTTP requests per minute** counts this integration's outgoing HTTPS attempts
+over the **last 60 seconds**. It includes login, authentication retries, reads,
+controls, and failed attempts. Each attempt expires from the count after 60
+seconds, so a burst of requests gradually drops out of the window. It is a
+rolling count rather than a lifetime counter or a wall-clock minute reset.
+Requests from the charger web UI, Autel app, and other integrations are not counted.
+
+The counter is kept in memory and starts afresh when the integration reloads.
+Home Assistant displays a cached reading, updated with status refreshes and by
+a local 60-second timer. The timer makes **no charger requests**, works with
+automatic polling disabled, and keeps the counter available during HTTP failures.
+Downloaded diagnostics also include the counter and the last request's duration
+in seconds. A manual **Refresh** itself makes seven requests, so expect a
+temporary increase when troubleshooting.
+
+Use **Settings → Devices & services → Autel MaxiCharger over HTTPS → ⋮ →
+Enable debug logging** to collect a troubleshooting session. Reproduce the issue,
+then disable debug logging and download the log when prompted. On Home Assistant
+versions that expose logging through **Settings → System → Logs**, set this
+integration's logging level to **Debug** there and restore it after testing.
+You can also use the `logger.set_level` action:
+
+```yaml
+action: logger.set_level
+data:
+  custom_components.autel_http: debug
+```
+
+Debug logs record command/realtime/parameter codes, HTTP status, charger error
+codes, response durations, request count, charging/connection measurements, and
+the chosen next polling interval. They omit PINs, password hashes, tokens,
+request headers, charger addresses, and serial numbers; complete request/response
+bodies are never logged. Logging adds no charger requests. Restore the level
+to `warning` with the same action to end a manually enabled debug session.
 
 ## Development
 

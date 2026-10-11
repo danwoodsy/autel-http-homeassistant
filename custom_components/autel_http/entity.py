@@ -29,7 +29,9 @@ class AutelEntity(CoordinatorEntity[AutelCoordinator]):
             configuration_url=coordinator.client.origin,
         )
 
-    async def async_control(self, action: Awaitable[None]) -> None:
+    async def async_control(
+        self, action: Awaitable[None], *, refresh_current: bool = False
+    ) -> None:
         try:
             await action
         except AutelAuthError as err:
@@ -51,6 +53,8 @@ class AutelEntity(CoordinatorEntity[AutelCoordinator]):
         assert entry is not None
         entry.async_create_background_task(
             self.hass,
-            self.coordinator.async_request_refresh(),
+            self.coordinator.async_refresh_after_control(
+                refresh_current=refresh_current
+            ),
             "Refresh Autel status after control",
         )

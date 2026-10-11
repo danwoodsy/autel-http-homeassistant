@@ -1,6 +1,7 @@
 """Validate captured wire formats, limits, and safe authentication renewal."""
 
 import asyncio
+import logging
 from unittest.mock import patch
 
 import aiohttp
@@ -34,6 +35,48 @@ async def test_login_and_discovery(client, charger, aioclient_mock):
     assert "Authorization" not in aioclient_mock.mock_calls[0][3]
     await client.request("get_current_network")
     assert charger.login_count == 1
+
+
+async def test_request_count_expires_and_includes_login_retries_and_failures(
+    client, charger
+):
+    with patch("custom_components.autel_http.api.monotonic", return_value=100):
+        await client.discover()
+        assert client.requests_last_minute == 2
+    charger.overrides["get_current_network"] = [
+        {"cmd": "get_current_network", "errcode": "1001", "success": "-1"}
+    ]
+    with patch("custom_components.autel_http.api.monotonic", return_value=110):
+        await client.request("get_current_network")
+        assert client.requests_last_minute == 5
+    with patch("custom_components.autel_http.api.monotonic", return_value=150):
+        await client.set_current(10, 32)
+    charger.overrides["debug_ctrl_pile_charge"] = [TimeoutError()]
+    with patch("custom_components.autel_http.api.monotonic", return_value=155):
+        with pytest.raises(AutelConnectionError):
+            await client.set_charging(False)
+        assert client.requests_last_minute == 7
+    count = len(charger.calls)
+    for now, expected in ((159, 7), (160, 5), (170, 2), (215, 0)):
+        with patch("custom_components.autel_http.api.monotonic", return_value=now):
+            assert client.requests_last_minute == expected
+    assert len(charger.calls) == count  # Reading the counter never hits the charger.
+
+
+async def test_debug_logs_include_timings_without_credentials(client, charger, caplog):
+    caplog.set_level(logging.DEBUG, logger="custom_components.autel_http.api")
+    await client.discover()
+    await client.realtime(1537)
+    charger.overrides["debug_ctrl_pile_charge"] = [TimeoutError()]
+    with pytest.raises(AutelConnectionError):
+        await client.set_charging(False)
+    logs = caplog.text
+    assert "command=get_realtime_data rtcode=1537" in logs
+    assert "HTTP status=200 duration=" in logs
+    assert "HTTPS request failed: command=debug_ctrl_pile_charge" in logs
+    assert "requests_last_minute=" in logs
+    for forbidden in (TEST_PIN, PIN_HASH, charger.token, HOST, SERIAL, "admin"):
+        assert forbidden not in logs
 
 
 async def test_tls_and_timeout_are_explicit(client, charger):

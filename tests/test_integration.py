@@ -151,6 +151,71 @@ async def test_missing_system_field_is_unknown(hass, loaded, charger):
     assert float(state(hass, "sensor", "cpu_usage").state) == 65
 
 
+async def test_current_readback_failure_isolated_until_detailed_refresh(
+    hass, loaded, charger
+):
+    coordinator = loaded.runtime_data.coordinator
+    charger.overrides["get_param_value"] = [TimeoutError()]
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {"entity_id": entity_id(hass, "number", "current_limit"), "value": 10},
+        blocking=True,
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert state(hass, "number", "current_limit").state == "unavailable"
+    assert state(hass, "sensor", "power").state == "3.848"
+    assert state(hass, "binary_sensor", "charging").state == "on"
+    charger.calls.clear()
+    await coordinator.async_refresh()
+    assert len(charger.calls) == 2
+    assert state(hass, "number", "current_limit").state == "unavailable"
+    await coordinator.async_refresh_all()
+    assert float(state(hass, "number", "current_limit").state) == 10
+
+
+async def test_external_current_limit_change_uses_detailed_cadence(
+    hass, loaded, charger
+):
+    charger.current["maxCurr"] = 12
+    await loaded.runtime_data.coordinator.async_refresh()
+    assert float(state(hass, "number", "current_limit").state) == 16
+    await loaded.runtime_data.coordinator.async_refresh_all()
+    assert float(state(hass, "number", "current_limit").state) == 12
+
+
+async def test_request_counter_updates_locally_with_polling_disabled(
+    hass, charger, entry, freezer
+):
+    hass.config_entries.async_update_entry(entry, pref_disable_polling=True)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    counter = state(hass, "sensor", "http_requests_per_minute")
+    assert int(counter.state) == 9
+    assert counter.attributes["unit_of_measurement"] == "requests/min"
+    count = len(charger.calls)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert state(hass, "sensor", "http_requests_per_minute").state == "0"
+    assert len(charger.calls) == count
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(counter.entity_id).state == "unavailable"
+    assert len(charger.calls) == count
+
+
+async def test_request_counter_updates_when_charger_readings_do_not_change(
+    hass, loaded, charger
+):
+    assert state(hass, "sensor", "http_requests_per_minute").state == "9"
+    await loaded.runtime_data.coordinator.async_refresh()
+    assert len(charger.calls) == 11
+    assert state(hass, "sensor", "http_requests_per_minute").state == "11"
+
+
 async def test_stop_readback_keeps_vehicle_connected(hass, loaded, charger):
     await hass.services.async_call(
         "button",
@@ -163,6 +228,7 @@ async def test_stop_readback_keeps_vehicle_connected(hass, loaded, charger):
     assert state(hass, "sensor", "status").state == "completed"
     assert state(hass, "binary_sensor", "vehicle_connected").state == "on"
     assert float(state(hass, "sensor", "power").state) == 0
+    assert loaded.runtime_data.coordinator.update_interval == timedelta(seconds=60)
     controls = [c for c in charger.calls if c["cmd"] == "debug_ctrl_pile_charge"]
     assert len(controls) == 1
     assert controls[0]["data"]["op"] == 2
@@ -180,9 +246,11 @@ async def test_start_and_current_readback(hass, loaded, charger, freezer):
     )
     await hass.async_block_till_done(wait_background_tasks=True)
     assert state(hass, "binary_sensor", "charging").state == "on"
+    assert loaded.runtime_data.coordinator.update_interval == timedelta(seconds=10)
     freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
+    charger.calls.clear()
     await hass.services.async_call(
         "number",
         "set_value",
@@ -191,6 +259,13 @@ async def test_start_and_current_readback(hass, loaded, charger, freezer):
     )
     await hass.async_block_till_done(wait_background_tasks=True)
     assert float(state(hass, "number", "current_limit").state) == 10
+    assert [c["cmd"] for c in charger.calls] == [
+        "set_param_value",
+        "get_realtime_data",
+        "get_realtime_data",
+        "get_param_value",
+    ]
+    assert charger.calls[-1]["data"]["list"] == [5]
 
 
 async def test_control_failure_does_not_change_state_or_retry(hass, loaded, charger):
@@ -208,18 +283,19 @@ async def test_control_failure_does_not_change_state_or_retry(hass, loaded, char
 
 async def test_status_and_detail_cadence(hass, loaded, charger):
     coordinator = loaded.runtime_data.coordinator
-    assert coordinator.update_interval == timedelta(seconds=30)
+    assert coordinator.update_interval == timedelta(seconds=10)
+    assert coordinator.status_interval == 60
     assert len(charger.calls) == 9  # login + identity + seven read-only poll requests
     charger.calls.clear()
     with patch("custom_components.autel_http.coordinator.monotonic", return_value=100):
         coordinator._last_details_attempt = 90
         await coordinator.async_refresh()
-    assert len(charger.calls) == 3
+    assert len(charger.calls) == 2
     assert [c["cmd"] for c in charger.calls] == [
         "get_realtime_data",
         "get_realtime_data",
-        "get_param_value",
     ]
+    assert [c["data"]["rtcode"] for c in charger.calls] == [1537, 2560]
     charger.calls.clear()
     with patch("custom_components.autel_http.coordinator.monotonic", return_value=211):
         await coordinator.async_refresh()
@@ -240,12 +316,20 @@ async def test_status_and_detail_cadence(hass, loaded, charger):
     assert len(charger.calls) == 7
 
 
-async def test_normal_poll_timer_uses_configured_interval(
-    hass, charger, entry, freezer
+@pytest.mark.parametrize("charging_interval", [5, 10, 15])
+async def test_poll_timer_switches_between_idle_and_charging(
+    hass, charger, entry, freezer, charging_interval
 ):
+    charger.telemetry.update(if_work_st=5, power=0)
+    charger.controller["CPState"] = 2
     hass.config_entries.async_update_entry(
         entry,
-        options={"status_interval": 60, "details_interval": 300, "request_timeout": 20},
+        options={
+            "status_interval": 60,
+            "charging_interval": charging_interval,
+            "details_interval": 300,
+            "request_timeout": 20,
+        },
     )
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -256,10 +340,32 @@ async def test_normal_poll_timer_uses_configured_interval(
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
     assert charger.calls == []
+    charger.telemetry.update(if_work_st=2, power=3848)
+    charger.controller["CPState"] = 3
     freezer.tick(timedelta(seconds=16))
     async_fire_time_changed(hass, dt_util.utcnow())
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert len(charger.calls) == 3
+    assert len(charger.calls) == 2
+    assert coordinator.update_interval == timedelta(seconds=charging_interval)
+    assert state(hass, "binary_sensor", "charging").state == "on"
+    charger.calls.clear()
+    freezer.tick(timedelta(seconds=charging_interval - 2))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert charger.calls == []
+    charger.telemetry.update(if_work_st=5, power=0)
+    charger.controller["CPState"] = 2
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(charger.calls) == 2
+    assert coordinator.update_interval == timedelta(seconds=60)
+    assert state(hass, "binary_sensor", "vehicle_connected").state == "on"
+    charger.calls.clear()
+    freezer.tick(timedelta(seconds=45))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert charger.calls == []
 
 
 async def test_optional_failure_preserves_normal_sensors(hass, loaded, charger):
@@ -292,7 +398,9 @@ async def test_primary_failure_and_recovery(hass, loaded, charger):
     await loaded.runtime_data.coordinator.async_refresh()
     assert state(hass, "sensor", "power").state == "unavailable"
     assert state(hass, "binary_sensor", "charging").state == "unavailable"
+    assert int(state(hass, "sensor", "http_requests_per_minute").state) == 10
     assert state(hass, "button", "refresh").state != "unavailable"
+    assert loaded.runtime_data.coordinator.update_interval == timedelta(seconds=60)
     await hass.services.async_call(
         "button",
         "press",
@@ -300,6 +408,7 @@ async def test_primary_failure_and_recovery(hass, loaded, charger):
         blocking=True,
     )
     assert state(hass, "sensor", "power").state == "3.848"
+    assert loaded.runtime_data.coordinator.update_interval == timedelta(seconds=10)
 
 
 @pytest.mark.parametrize(
@@ -325,7 +434,7 @@ async def test_unknown_state_and_bad_measurement(hass, loaded, charger):
 
 async def test_offline_limit_caps_number(hass, loaded, charger):
     charger.current["offlineCurr"] = "20"
-    await loaded.runtime_data.coordinator.async_refresh()
+    await loaded.runtime_data.coordinator.async_refresh_all()
     assert state(hass, "number", "current_limit").attributes["max"] == 20
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
@@ -425,7 +534,6 @@ async def test_polling_yields_to_a_pending_control(hass, loaded, charger):
         "get_realtime_data",
         "set_param_value",
         "get_realtime_data",
-        "get_param_value",
     ]
 
 
@@ -445,6 +553,11 @@ async def test_download_diagnostics_is_cached_and_omits_credentials(
     assert diagnostics["readings"]["telemetry"]["power"] == 3848
     assert diagnostics["readings"]["system"]["CpuState"] == 65
     assert diagnostics["readings"]["system"]["OcppState"] == 0
+    assert diagnostics["polling"]["status_interval"] == 60
+    assert diagnostics["polling"]["charging_interval"] == 10
+    assert diagnostics["polling"]["active_interval"] == 10
+    assert diagnostics["http"]["requests_last_minute"] == 9
+    assert diagnostics["http"]["last_request_duration"] >= 0
     serialized = json.dumps(diagnostics)
     for forbidden in (
         "sensitive-token",

@@ -2,14 +2,19 @@
 
 import asyncio
 import hashlib
+import logging
 import math
+from collections import deque
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 from urllib.parse import urlsplit
 
 import aiohttp
 
 from .const import MAX_CURRENT, MIN_CURRENT
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class AutelError(Exception):
@@ -106,6 +111,16 @@ class AutelClient:
         self._token: str | None = None
         self._lock = asyncio.Lock()
         self.info: ChargerInfo | None = None
+        self._request_times: deque[float] = deque()
+        self.last_request_duration: float | None = None
+
+    @property
+    def requests_last_minute(self) -> int:
+        """Count outgoing attempts in the last 60 seconds, entirely locally."""
+        cutoff = monotonic() - 60
+        while self._request_times and self._request_times[0] <= cutoff:
+            self._request_times.popleft()
+        return len(self._request_times)
 
     @property
     def origin(self) -> str:
@@ -118,6 +133,18 @@ class AutelClient:
         headers = {"Accept": "application/json", "X-Language": "en-US"}
         if self._token and payload["cmd"] != "account_login":
             headers["Authorization"] = self._token
+        started = monotonic()
+        self._request_times.append(started)
+        args = payload.get("data", {})
+        _LOGGER.debug(
+            "HTTPS request: command=%s rtcode=%s parameter=%s operation=%s",
+            payload["cmd"],
+            args.get("rtcode"),
+            args.get("list", args.get("code")),
+            args.get("op"),
+        )
+        status = None
+        outcome = "failed"
         try:
             async with self._session.post(
                 f"{self.origin}/localcfg",
@@ -126,14 +153,34 @@ class AutelClient:
                 ssl=self._verify_ssl,
                 timeout=self._timeout,
             ) as response:
+                status = response.status
                 if response.status in (401, 403):
                     raise AutelAuthError("HTTPS authentication rejected")
                 response.raise_for_status()
                 reply = await response.json(content_type=None)
+                if isinstance(reply, dict):
+                    _LOGGER.debug(
+                        "HTTPS reply: command=%s success=%s errcode=%s",
+                        payload["cmd"],
+                        numeric(reply.get("success")),
+                        numeric(reply.get("errcode")),
+                    )
+                outcome = "received"
         except (aiohttp.ClientError, TimeoutError) as err:
             raise AutelConnectionError("HTTPS request failed") from err
         except (ValueError, UnicodeError) as err:
             raise AutelProtocolError("Invalid JSON response") from err
+        finally:
+            self.last_request_duration = monotonic() - started
+            _LOGGER.debug(
+                "HTTPS request %s: command=%s HTTP status=%s duration=%.3fs "
+                "requests_last_minute=%s",
+                outcome,
+                payload["cmd"],
+                status,
+                self.last_request_duration,
+                self.requests_last_minute,
+            )
         if not isinstance(reply, dict):
             raise AutelProtocolError("Invalid response envelope")
         return reply
@@ -176,6 +223,7 @@ class AutelClient:
                 payload["data"] = data
             reply = await self._post(payload)
             if str(reply.get("errcode")) == "1001":
+                _LOGGER.debug("Renewing charger login after authentication rejection")
                 await self._login()
                 payload["token"] = self._token
                 reply = await self._post(payload)

@@ -34,6 +34,12 @@ class AutelCurrentLimit(AutelEntity, NumberEntity):
         super().__init__(coordinator, "current_limit")
 
     @property
+    def available(self) -> bool:
+        return (
+            super().available and "current" in self.coordinator.data.details_available
+        )
+
+    @property
     def native_max_value(self) -> float:
         return self.coordinator.max_current
 
@@ -43,5 +49,6 @@ class AutelCurrentLimit(AutelEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         await self.async_control(
-            self.coordinator.client.set_current(value, self.native_max_value)
+            self.coordinator.client.set_current(value, self.native_max_value),
+            refresh_current=True,
         )

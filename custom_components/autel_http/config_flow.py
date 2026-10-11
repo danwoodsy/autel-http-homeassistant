@@ -27,14 +27,17 @@ from .api import (
     normalize_host,
 )
 from .const import (
+    CONF_CHARGING_INTERVAL,
     CONF_DETAILS_INTERVAL,
     CONF_PIN,
     CONF_REQUEST_TIMEOUT,
     CONF_STATUS_INTERVAL,
+    DEFAULT_CHARGING_INTERVAL,
     DEFAULT_DETAILS_INTERVAL,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_STATUS_INTERVAL,
     DOMAIN,
+    MIN_CHARGING_INTERVAL,
     MIN_STATUS_INTERVAL,
 )
 from .coordinator import connector_record
@@ -181,7 +184,9 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(self, user_input=None):
         errors = {}
         if user_input is not None:
-            if user_input[CONF_DETAILS_INTERVAL] < user_input[CONF_STATUS_INTERVAL]:
+            if user_input[CONF_CHARGING_INTERVAL] > user_input[CONF_STATUS_INTERVAL]:
+                errors[CONF_CHARGING_INTERVAL] = "charging_too_slow"
+            elif user_input[CONF_DETAILS_INTERVAL] < user_input[CONF_STATUS_INTERVAL]:
                 errors[CONF_DETAILS_INTERVAL] = "details_too_fast"
             else:
                 return self.async_create_entry(data=user_input)
@@ -190,6 +195,15 @@ class AutelOptionsFlow(config_entries.OptionsFlowWithReload):
             step_id="init",
             data_schema=probatio.Schema(
                 {
+                    probatio.Required(
+                        CONF_CHARGING_INTERVAL,
+                        default=defaults.get(
+                            CONF_CHARGING_INTERVAL, DEFAULT_CHARGING_INTERVAL
+                        ),
+                    ): probatio.All(
+                        probatio.Coerce(int),
+                        probatio.Range(min=MIN_CHARGING_INTERVAL, max=3600),
+                    ),
                     probatio.Required(
                         CONF_STATUS_INTERVAL,
                         default=defaults.get(
